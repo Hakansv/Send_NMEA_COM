@@ -8,13 +8,15 @@
 // Functions for user input of Nav-Data. Håkan 2016-11-08  
  
 #include "stdafx.h"
+#include <iostream>
+#include <fstream>
 using namespace std;
 
 //Nav-data variables
 string s_Cog = "272.1";  //Degres value for Cog
 string s_Mag = "272.1"; //Heading for NMEA
 double d_Course = 282.1;  //Course to steer
-double d_SOG = 5.5;    //Speed to run
+double d_SOG = 6.5;    //Speed to run
 double Def_Lat = 5803.200, Def_Long = 01122.100; //NMEA-Format!! Initial position for the cruise, N/E :)
 string N_S = "N", E_W = "E";
 double wmm = 3.0; //Variation to calc HDM from Course
@@ -35,6 +37,8 @@ double STW_Upd = 0.003; //STW incr. each cycle
 bool Quit = false;
 bool T = false;
 clock_t PosTimer = clock();
+//TODO check if found:
+string userdata = getenv("USERPROFILE");
 
 //Functions
 void CalculateNewPos(double, double);
@@ -48,6 +52,8 @@ void MakeNMEA_VHW();
 void NMEA_HDM(void);
 void MakeNMEA_MWV(bool);
 double GetUserInput(double, int, int);
+void ReadNavData(void);
+void WriteNavdata(void);
 
 enum Lat_long { LAT = 1, LON = 2};
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n" ;
@@ -70,6 +76,7 @@ int main()
     wchar_t pcCommPort[20];
     char Port[10];
 
+    ReadNavData(); //Read Navdata from file
     fprintf_s(stderr, "\nNow searching for a useable port.....\n");
 
     // Use FileOpen()
@@ -504,15 +511,19 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   }
 
   void GetNavData(void) {
-      cout << "\n Present Data:\n"
+      bool b_PrintNavD = true;
+      cout << "\n Present Navdata:\n"
           << " Initial Latitude: " << (d_Lat = NMEA_degToDecDegr(d_Lat, LAT)) << "\n"
           << " Initial Longitude: " << (d_long = NMEA_degToDecDegr(d_long, LON)) << "\n"
           << " Course: " << d_Course << "\n"
           << " Variation: " << wmm << "\n"
           << " Speed knots: " << d_SOG;
 
-      _cputs("\n\nHit key \"y\" to update any value. Any other key will keep existing Nav-Data\n\n");
+      _cputs("\n\nHit key \"y\" to accept above values. Any other key will let you change them, one by one.\n\n");
       if (toupper(_getch()) == 'Y') {
+          b_PrintNavD = false;
+          cout << "Present Navdata accepted\n";
+      } else {
           cout << "Enter a latitude instead of: " << d_Lat << ". Enter any char a-z to skip to next\n";
           double test = GetUserInput(d_Lat, -90, 90);
           if (test) { d_Lat = test; } // cout << "New value: " << d_Lat << "\n";
@@ -535,6 +546,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       }
       d_Lat = DegrPosToNMEAPos(d_Lat, LAT); //Back to NMEA format
       d_long = DegrPosToNMEAPos(d_long, LON); //Back to NMEA format
+      if (b_PrintNavD) WriteNavdata(); // Print the new Navdata to config file
   }
 
   double GetUserInput(double NavData, int min, int max) {
@@ -551,4 +563,51 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           }
   }
   
- 
+  void ReadNavData(void) {
+      string filePath = userdata;
+      filePath += "\\SendNMEACOM\\navdata.cnv";
+      string line;
+      ifstream myfile(filePath);
+      if (myfile.is_open())
+      {
+          string s_Nav[4];
+          for (int i = 0; i < 5; ++i)
+          {
+              myfile >> s_Nav[i];
+          }
+          d_Lat =    std::stod(s_Nav[0]);
+          d_long =   std::stod(s_Nav[1]);
+          d_Course = std::stod(s_Nav[2]);
+          wmm =      std::stod(s_Nav[3]);
+          d_SOG =    std::stod(s_Nav[4]);
+          myfile.close();
+      }
+      else {
+          cout << "Unable to find the Navdata file. I'll make a new one\n";
+          WriteNavdata();
+      }
+  }
+
+  void WriteNavdata(void) {
+      string filePath = userdata;
+      filePath += "\\SendNMEACOM";
+      if (CreateDirectoryA(filePath.c_str(), NULL) ||
+          ERROR_ALREADY_EXISTS == GetLastError())
+      {
+          filePath += "\\navdata.cnv";
+          ofstream myfile;
+          myfile.open(filePath, ios::trunc);
+          if (myfile.is_open())
+          {
+              myfile << d_Lat << "\n";
+              myfile << d_long << "\n";
+              myfile << d_Course << "\n";
+              myfile << wmm << "\n";
+              myfile << d_SOG << "\n";
+              myfile.close();
+              cout << "\n" << "New Navdata was printed to:\n" << filePath << "\n";
+          }
+          else cout << "Unable to open file to write\n";
+      }
+      else cout << "Sorry, Unable to create file directory: " << filePath << "\n";
+  }
