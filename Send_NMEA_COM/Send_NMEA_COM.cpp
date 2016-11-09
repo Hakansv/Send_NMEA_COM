@@ -253,17 +253,6 @@ int main()
              return 1;
          }
          fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
-
-         //Send MWV > Wind speeed and angle
-         Sleep(PauseTime);
-         if (!WriteFile(hSerial, MWV_NMEA, strlen(MWV_NMEA), &bytes_written, NULL))
-         {
-             fprintf_s(stderr, "Error. Hit a key to exit\n");
-             CloseHandle(hSerial);
-             int Dummy = toupper(_getch());
-             return 1;
-         }
-         fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
          
          MakeNMEA_MWV(T); //Make the MWV in every turn and alter between R and T.
          T = !T;
@@ -516,8 +505,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
 
   void GetNavData(void) {
       cout << "\n Present Data:\n"
-          << " Latitude: " << (d_Lat = NMEA_degToDecDegr(d_Lat, LAT)) << "\n"
-          << " Longitude: " << (d_long = NMEA_degToDecDegr(d_long, LON)) << "\n"
+          << " Initial Latitude: " << (d_Lat = NMEA_degToDecDegr(d_Lat, LAT)) << "\n"
+          << " Initial Longitude: " << (d_long = NMEA_degToDecDegr(d_long, LON)) << "\n"
           << " Course: " << d_Course << "\n"
           << " Variation: " << wmm << "\n"
           << " Speed knots: " << d_SOG;
