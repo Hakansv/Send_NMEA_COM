@@ -32,6 +32,7 @@ int testsum(string);
 char NMEA[80], HDM_NMEA[50], MWV_NMEA[50];
 double d_long = Def_Long, d_Lat = Def_Lat;
 bool b_Move = false;
+bool esc = false;
 double STW = 6.20;      //STW for VHW
 double STW_Upd = 0.003; //STW incr. each cycle
 bool Quit = false;
@@ -54,6 +55,7 @@ void MakeNMEA_MWV(bool);
 double GetUserInput(double, int, int);
 void ReadNavData(void);
 void WriteNavdata(void);
+void FormatCourseData(void);
 
 enum Lat_long { LAT = 1, LON = 2};
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n" ;
@@ -185,17 +187,33 @@ int main()
         b_Move = true; 
     }
 
-    s_Mag = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Course - wmm))->str();
-    s_Cog = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Course))->str();;
-    angleRadHeading = d_Course * M_PI / 180.0;
-    
+    FormatCourseData();
+        
     DWORD bytes_written, total_bytes_written = 0;
-    fprintf_s(stderr, "\nSending bytes...Any key stroke will exit the program.\n\n");
+    fprintf_s(stderr, "\n         Sending bytes...Hit Esc or Space to exit the program.\n         Hit any other key to change course while running.\n\n\n");
 
     NMEA_HDM(); //Make the HDM sentance once.
-    
-    while(!_kbhit()) { //Quit)
-	    Sleep (PauseTime);
+
+    while (!esc) { //Quit on Esc or space
+        if (_kbhit()){ //Check for a key press to exit the program or enter a new course
+            char key = _getch();
+            if (key == 27 || key == 32) {
+                esc = true;
+            }
+            else {
+                string keys;
+                cout << "Enter a new course instead of: " << d_Course << "\n";
+                double NewCourse = d_Course;
+                NewCourse = GetUserInput(NewCourse, 0, 360); //std::stod(keys);
+                if (NewCourse) {
+                    d_Course = NewCourse;
+                    FormatCourseData();
+                    cout << "New course: " << NewCourse << " implemented\n";
+                    NMEA_HDM();
+                }
+            }
+        }
+        Sleep (PauseTime);
         if (Last) {
             if (((clock() - PosTimer) / CLOCKS_PER_SEC) < SecToNextPos) continue; // Wait for enough distance to calc pos.
             MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
@@ -444,6 +462,12 @@ for ( i = 0; i < 80; i++) {  //strlen(strN)
 return XOR;
 }
 
+void FormatCourseData(void) {
+    s_Mag = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Course - wmm))->str();
+    s_Cog = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Course))->str();;
+    angleRadHeading = d_Course * M_PI / 180.0;
+}
+
 void CalculateNewPos(double Lat_in, double Long_in) {
     double secondsPassed = (clock() - PosTimer) / CLOCKS_PER_SEC;
     const double mRadiusEarth = 6378100.0f;
@@ -483,7 +507,7 @@ double rad2deg(double Rad_in, int LL){
 }
 
 double NMEA_degToDecDegr(double NMEA_deg, int LL) {
-    //Lat/Long in NMEA format. Make it to decimal degrees. We assume nothern hemisphere and East longitude for now
+    //Lat/Long in NMEA format. Make it to decimal degrees.
     double degs = (int)(NMEA_deg / 100.0);
     double mins = NMEA_deg - degs * 100.0;
     double Dec_degs = degs + mins / 60.0;
@@ -522,7 +546,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       _cputs("\n\nHit key \"y\" to accept above values. Any other key will let you change them, one by one.\n\n");
       if (toupper(_getch()) == 'Y') {
           b_PrintNavD = false;
-          cout << "Present Navdata accepted\n";
+          cout << "Present Navdata accepted\n\n";
       } else {
           cout << "Enter a latitude instead of: " << d_Lat << ". Enter any char a-z to skip to next\n";
           double test = GetUserInput(d_Lat, -90, 90);
@@ -558,7 +582,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
               return x;
           }
           else {
-              cout << "OK - No change to: " << NavData << "\n\n";
+              cout << "No change to: " << NavData << "\n\n";
               return NULL;
           }
   }
@@ -566,11 +590,11 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   void ReadNavData(void) {
       string filePath = userdata;
       filePath += "\\SendNMEACOM\\navdata.cnv";
-      string line;
+      //string line;
       ifstream myfile(filePath);
       if (myfile.is_open())
       {
-          string s_Nav[4];
+          string s_Nav[5];
           for (int i = 0; i < 5; ++i)
           {
               myfile >> s_Nav[i];
