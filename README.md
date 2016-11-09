@@ -27,3 +27,13 @@ Using above values the initial position will be updated to follow given course a
 Thus you'll get a moving boat in for example OpenCPN and also test some Dashboard instruments.
 
 ![console_clip](https://cloud.githubusercontent.com/assets/7202854/20133092/5b613726-a666-11e6-94f3-dbe0f7412c2a.PNG)
+
+Thanks to:
+// Send_NMEA_COM.cpp : Defines the entry point for the console application.  
+// A simple serial port writing example  
+// Written by Ted Burke - last updated 13-2-2013  
+// published http://batchloaf.wordpress.com/2013/02/13/writing-bytes-to-a-serial-port-in-c/  
+// Adapted for NMEA simulation by Douwe Fokkema 11-11-2014  
+// Adapted with moving position and NMEA chechsum by Håkan Svensson 2014-11-20  
+// Added routine to find a COM port and more NMEA strings by Håkan 2016-06-09  
+// Functions for user input of Nav-Data. Håkan 2016-11-08  
