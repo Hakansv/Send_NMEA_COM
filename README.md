@@ -1,7 +1,8 @@
 # Send_NMEA_COM
 Send NMEA sentences to a serial COM port for test. Primarily for OpenCPN
 A small console program to send NMEA messages to a serial COM port.
-Only tested in Windows and built in VS2013.
+Only tested in Windows and built in VS2013.  
+Build it by yourself or download the Windows exe file from the Release tab.
 
 The program searches for free COM-ports and you can choose the one you like.
 
