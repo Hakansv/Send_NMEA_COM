@@ -28,7 +28,7 @@ Thus you'll get a moving boat in for example OpenCPN and also test some Dashboar
 
 ![console_clip](https://cloud.githubusercontent.com/assets/7202854/20133092/5b613726-a666-11e6-94f3-dbe0f7412c2a.PNG)
 
-Thanks to:
+Thanks to:  
 // Send_NMEA_COM.cpp : Defines the entry point for the console application.  
 // A simple serial port writing example  
 // Written by Ted Burke - last updated 13-2-2013  
