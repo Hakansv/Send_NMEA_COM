@@ -5,14 +5,15 @@
 // Adapted for NMEA simulation by Douwe Fokkema 11-11-2014
 // Adapted with moving position and NMEA chechsum by Håkan Svensson 2014-11-20
 // Added routine to find a COM port and more NMEA strings by Håkan 2016-06-09
-// Functions for user input of Nav-Data. Håkan 2016-11-08  
+// Functions for user input of Nav-Data. Håkan 2016-11-08
+// More UI functions. Håkan 2016-11-10
  
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
 using namespace std;
 
-//Nav-data variables
+//Initial Nav-data variables
 string s_Cog = "272.1";  //Degres value for Cog
 string s_Mag = "272.1"; //Heading for NMEA
 double d_Course = 282.1;  //Course to steer
@@ -20,7 +21,7 @@ double d_SOG = 6.5;    //Speed to run
 double Def_Lat = 5803.200, Def_Long = 01122.100; //NMEA-Format!! Initial position for the cruise, N/E :)
 string N_S = "N", E_W = "E";
 double wmm = 3.0; //Variation to calc HDM from Course
-double SecToNextPos = 3.0; //Time, e.g. distance to wait befor next posistion change.
+double SecToNextPos = 3.0; //Time, e.g. distance to wait before next posistion change.
 
 //Others 
 double angleRadHeading = 1; //Heading in radians
@@ -38,6 +39,7 @@ double STW = 6.20;      //STW for VHW
 double STW_Upd = 0.003; //STW incr. each cycle
 bool Quit = false;
 bool T = false;
+bool hideNMEA = false;
 clock_t PosTimer = clock();
 //TODO check if found:
 string userdata = getenv("USERPROFILE");
@@ -58,6 +60,7 @@ void ReadNavData(void);
 void WriteNavdata(void);
 void FormatCourseData(void);
 void PrintUserInfo(void);
+void OnKeyPress(void);
 
 enum Lat_long { LAT = 1, LON = 2};
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n" ;
@@ -197,45 +200,18 @@ int main()
 
     while (!esc) { //Quit on Esc or space
         if (_kbhit()){ //Check for a key press to exit the program or enter a new course
-            char key = _getch();
-            switch (key) {
-            case 27:
-            case 32:
-                esc = true;
-                break;
-            case '+':
-                d_Course += 10;
-                if (d_Course > 360) d_Course = d_Course - 360;
-                break;
-            case '-':
-                d_Course -= 10;
-                if (d_Course < 0) d_Course = 360 + d_Course;
-                break;
-            default:
-                string keys;
-                cout << "Enter a new course instead of: " << d_Course << "\n";
-                double NewCourse = d_Course;
-                NewCourse = GetUserInput(NewCourse, 0, 360);
-                if (NewCourse) {
-                    d_Course = NewCourse;
-                    WriteNavdata();  //Safe the new course in config file
-                }
-            }
-            if (!esc) {
-                FormatCourseData();
-                cout << "New course: " << d_Course << " implemented\n";
-                NMEA_HDM(); //Update NMEA message after course change
-            }
-           }
+            OnKeyPress();
+        }
+
         Sleep (PauseTime);
         if (Last) {
             if (((clock() - PosTimer) / CLOCKS_PER_SEC) < SecToNextPos) continue; // Wait for enough distance to calc pos.
             if (InfoCount > 10) { PrintUserInfo(); InfoCount = 0; }
-            InfoCount++;
+            if (!hideNMEA ) InfoCount++;
             MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
-        Last = !Last; //Alter between the two every second turn
+        Last = !Last; //Alter between the two every turn
         if(!WriteFile(hSerial, NMEA, strlen(NMEA), &bytes_written, NULL))
         {
             cout << bytes_written << " Bytes written \n";
@@ -246,7 +222,7 @@ int main()
         }  
 
          //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
-         fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
+         if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
         
          if (Last) continue; //Send the rest NMEA mess every second turn only.
     
@@ -258,7 +234,7 @@ int main()
             int Dummy = toupper(_getch());
             return 1;
         }
-         fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
+         if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
 
          //Send MTW > Water temperature
          Sleep(PauseTime);
@@ -269,7 +245,7 @@ int main()
              int Dummy = toupper(_getch());
              return 1;
          }
-         fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
+         if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
          
          //Send NMEA_DBT > Depth
          Sleep(PauseTime);
@@ -280,7 +256,7 @@ int main()
              int Dummy = toupper(_getch());
              return 1;
          }
-         fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
+         if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
 
          //Send MWV > Wind speeed and realtive angle
          Sleep(PauseTime);
@@ -291,11 +267,11 @@ int main()
              int Dummy = toupper(_getch());
              return 1;
          }
-         fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
+         if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
          
          MakeNMEA_MWV(T); //Make the MWV in every turn and alter between R and T.
          T = !T;
-}
+} //End of while()
 
     // Close serial port
     fprintf_s(stderr, "Closing serial port...");
@@ -309,7 +285,7 @@ int main()
  
     // Quit normally
     return 0;
-}
+} //End of main()
 
 
 void MakeNMEA() { 
@@ -607,28 +583,35 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   }
   
   void ReadNavData(void) {
+      bool file_eof = false;
       string filePath = userdata;
       filePath += "\\SendNMEACOM\\navdata.cnv";
-      //string line;
       ifstream myfile(filePath);
       if (myfile.is_open())
       {
           string s_Nav[5];
           for (int i = 0; i < 5; ++i)
           {
-              myfile >> s_Nav[i];
+              if (myfile.eof()) {
+                  file_eof = true;
+                  continue;
+              }
+                  myfile >> s_Nav[i];
           }
-          d_Lat =    std::stod(s_Nav[0]);
-          d_long =   std::stod(s_Nav[1]);
-          d_Course = std::stod(s_Nav[2]);
-          wmm =      std::stod(s_Nav[3]);
-          d_SOG =    std::stod(s_Nav[4]);
+          if (!file_eof) {
+              d_Lat = std::stod(s_Nav[0]);
+              d_long = std::stod(s_Nav[1]);
+              d_Course = std::stod(s_Nav[2]);
+              wmm = std::stod(s_Nav[3]);
+              d_SOG = std::stod(s_Nav[4]);
+          }
           myfile.close();
       }
       else {
           cout << "Unable to find the Navdata file. I'll make a new one\n";
           WriteNavdata();
       }
+      if (file_eof) WriteNavdata(); //Navdata file corrupt. False user input??
   }
 
   void WriteNavdata(void) {
@@ -648,14 +631,58 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
               myfile << wmm << "\n";
               myfile << d_SOG << "\n";
               myfile.close();
-              cout << "\n" << "New Navdata was printed to:\n" << filePath << "\n";
+              cout << "\n" << "New Navdata was saved to:\n" << filePath << "\n";
           }
           else cout << "Unable to open file to write\n";
       }
       else cout << "Sorry, Unable to create file directory: " << filePath << "\n";
   }
   void PrintUserInfo(void) {
-      cout << "\n         Hit Esc or Space to exit the program.\n"
-          << "         Hit + or - to instantly change course 10 degr up or down\n"
-          << "         Hit any other key to change the inital course to a new value.\n\n";
+      cout << "\n     Hit Esc or Space to exit the program.\n"
+          << "     Hit + or - to instantly change course 10 degr up or down\n"
+          << "     Hit P to hide/show NMEA messaging to screen\n"
+          << "     Hit any other key to change the initial course to a new value.\n\n";
+  }
+
+  void OnKeyPress(void) {
+      char key = _getch();
+      bool pIsTouched = false;
+      switch (key) {
+      case 27:
+      case 32:
+          esc = true;
+          break;
+      case '+':
+          d_Course += 10;
+          if (d_Course > 360) d_Course = d_Course - 360;
+          break;
+      case '-':
+          d_Course -= 10;
+          if (d_Course < 0) d_Course = 360 + d_Course;
+          break;
+      case 'p':
+      case 'P':
+          pIsTouched = true;
+          if (!hideNMEA) {
+              cout << "\n  NMEA printing to screen is disabled. Hit P again to reset\n";
+              PrintUserInfo();
+          }
+          else cout << "  Print NMEA again\n";
+          hideNMEA = !hideNMEA;
+          break;
+      default:
+          string keys;
+          cout << "Enter a new course instead of: " << d_Course << " Or any letter to quit\n";
+          double NewCourse = d_Course;
+          NewCourse = GetUserInput(NewCourse, 0, 360);
+          if (NewCourse) {
+              d_Course = NewCourse;
+              WriteNavdata();  //Safe the new course in config file
+          }
+      }
+      if (!esc && !pIsTouched) {
+          FormatCourseData();
+          cout << "New course: " << d_Course << " degrees\n";
+          NMEA_HDM(); //Update NMEA message after course change
+      }
   }
