@@ -28,6 +28,7 @@ double Incr_Pos_Lat = 0.0001;  //Increase of Lat for each moving update.
 double Incr_Pos_Lon = 0.004;  //Increase of Long for each moving update.
 double M_PI = 3.14159;
 int PauseTime = 175;  //Pause between each transmitt
+int InfoCount = 0;
 int testsum(string);
 char NMEA[80], HDM_NMEA[50], MWV_NMEA[50];
 double d_long = Def_Long, d_Lat = Def_Lat;
@@ -56,6 +57,7 @@ double GetUserInput(double, int, int);
 void ReadNavData(void);
 void WriteNavdata(void);
 void FormatCourseData(void);
+void PrintUserInfo(void);
 
 enum Lat_long { LAT = 1, LON = 2};
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n" ;
@@ -186,36 +188,50 @@ int main()
     } else { 
         b_Move = true; 
     }
-
     FormatCourseData();
         
     DWORD bytes_written, total_bytes_written = 0;
-    fprintf_s(stderr, "\n         Sending bytes...Hit Esc or Space to exit the program.\n         Hit any other key to change course while running.\n\n\n");
-
-    NMEA_HDM(); //Make the HDM sentance once.
+    fprintf_s(stderr, "\n         Sending bytes...\n");
+    PrintUserInfo();
+    NMEA_HDM(); //Make the HDM sentance.
 
     while (!esc) { //Quit on Esc or space
         if (_kbhit()){ //Check for a key press to exit the program or enter a new course
             char key = _getch();
-            if (key == 27 || key == 32) {
+            switch (key) {
+            case 27:
+            case 32:
                 esc = true;
-            }
-            else {
+                break;
+            case '+':
+                d_Course += 10;
+                if (d_Course > 360) d_Course = d_Course - 360;
+                break;
+            case '-':
+                d_Course -= 10;
+                if (d_Course < 0) d_Course = 360 + d_Course;
+                break;
+            default:
                 string keys;
                 cout << "Enter a new course instead of: " << d_Course << "\n";
                 double NewCourse = d_Course;
-                NewCourse = GetUserInput(NewCourse, 0, 360); //std::stod(keys);
+                NewCourse = GetUserInput(NewCourse, 0, 360);
                 if (NewCourse) {
                     d_Course = NewCourse;
-                    FormatCourseData();
-                    cout << "New course: " << NewCourse << " implemented\n";
-                    NMEA_HDM();
+                    WriteNavdata();  //Safe the new course in config file
                 }
             }
-        }
+            if (!esc) {
+                FormatCourseData();
+                cout << "New course: " << d_Course << " implemented\n";
+                NMEA_HDM(); //Update NMEA message after course change
+            }
+           }
         Sleep (PauseTime);
         if (Last) {
             if (((clock() - PosTimer) / CLOCKS_PER_SEC) < SecToNextPos) continue; // Wait for enough distance to calc pos.
+            if (InfoCount > 10) { PrintUserInfo(); InfoCount = 0; }
+            InfoCount++;
             MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
@@ -241,9 +257,7 @@ int main()
             CloseHandle(hSerial);
             int Dummy = toupper(_getch());
             return 1;
-        }  
-
-        //fprintf(stderr, "%d bytes Head: %s", bytes_written, HDM_NMEA); //\n finns i strängen Head
+        }
          fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
 
          //Send MTW > Water temperature
@@ -340,7 +354,6 @@ void MakeNMEA() {
     }
 }
 
-
 //Create NMEA string: $HCHDM,238.5,M*hh/CR/LF
 void NMEA_HDM() {
   string nmea = "$HCHDM,";
@@ -352,6 +365,7 @@ void NMEA_HDM() {
   nmea += '\r';
   nmea += '\n';
   int Lens = nmea.size();
+  memset(HDM_NMEA, NULL, sizeof(HDM_NMEA)); //Clear the array
   for (int a = 0; a < Lens; a++) {
       HDM_NMEA[a] = nmea[a];
   }
@@ -463,9 +477,13 @@ return XOR;
 }
 
 void FormatCourseData(void) {
-    s_Mag = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Course - wmm))->str();
+    double d_Mag = d_Course;
+    d_Mag = d_Mag - wmm;
+    if (d_Mag > 360.0){ d_Mag = d_Mag - 360.0; }
+    else { if (d_Mag < 0) d_Mag = 360.0 + d_Mag; }
+    s_Mag = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Mag))->str();
     s_Cog = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Course))->str();;
-    angleRadHeading = d_Course * M_PI / 180.0;
+    angleRadHeading = d_Course * M_PI / 180.0; //for POS calculation
 }
 
 void CalculateNewPos(double Lat_in, double Long_in) {
@@ -576,9 +594,10 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   double GetUserInput(double NavData, int min, int max) {
           double x;
           cin >> x;
+          if ( x < 1 ) x += 0.1; //Avoid 0 (int 0 = false)
           cin.clear();
           cin.ignore(10000, '\n');
-          if (x >= min && x <= max) {
+          if ( x >= min && x <= max ) {
               return x;
           }
           else {
@@ -634,4 +653,9 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           else cout << "Unable to open file to write\n";
       }
       else cout << "Sorry, Unable to create file directory: " << filePath << "\n";
+  }
+  void PrintUserInfo(void) {
+      cout << "\n         Hit Esc or Space to exit the program.\n"
+          << "         Hit + or - to instantly change course 10 degr up or down\n"
+          << "         Hit any other key to change the inital course to a new value.\n\n";
   }
