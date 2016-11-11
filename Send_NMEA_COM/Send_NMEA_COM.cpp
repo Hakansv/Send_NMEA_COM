@@ -23,11 +23,16 @@ string N_S = "N", E_W = "E";
 double wmm = 3.0; //Variation to calc HDM from Course
 double SecToNextPos = 3.0; //Time, e.g. distance to wait before next posistion change.
 
-//Others 
+//Others
+double d_AWSpeed_kn = 8.5, d_AWS_kn = 5; //App wind speed STÄDA!
+double d_AWangle_W = 270, d_AWA = 270; // App wind angle  STÄDA!
+double d_TWS_kn = 8.5; //True Wind speed
+double d_TWA = 270; //True wind angle
+
 double angleRadHeading = 1; //Heading in radians
 double Incr_Pos_Lat = 0.0001;  //Increase of Lat for each moving update.
 double Incr_Pos_Lon = 0.004;  //Increase of Long for each moving update.
-double M_PI = 3.14159;
+double M_PI = 3.141592654;
 int PauseTime = 175;  //Pause between each transmitt
 int InfoCount = 0;
 int testsum(string);
@@ -46,6 +51,7 @@ string userdata = getenv("USERPROFILE");
 
 //Functions
 void CalculateNewPos(double, double);
+void CalcWind ( void );
 void GetNavData(void);
 double deg2rad(double, int);
 double rad2deg(double, int);
@@ -197,6 +203,8 @@ int main()
     fprintf_s(stderr, "\n         Sending bytes...\n");
     PrintUserInfo();
     NMEA_HDM(); //Make the HDM sentance.
+    
+    CalcWind ();
 
     while (!esc) { //Quit on Esc or space
         if (_kbhit()){ //Check for a key press to exit the program or enter a new course
@@ -269,6 +277,7 @@ int main()
          }
          if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
          
+         CalcWind ();
          MakeNMEA_MWV(T); //Make the MWV in every turn and alter between R and T.
          T = !T;
 } //End of while()
@@ -414,15 +423,26 @@ void MakeNMEA_VHW() {
         6. Checksum*/
 
     void MakeNMEA_MWV(bool True) {
-        string R_T = True ? "T" : "R";
+        string s_WD = "";
+        string s_WS = "";
+        string s_R_T = True ? "T" : "R";
+        if ( True ) {
+            s_WD = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_TWA ) )->str ();
+            s_WS = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_TWS_kn ) )->str ();
+            s_R_T = "T";
+        } else {
+            s_WD = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_AWA ) )->str ();
+            s_WS = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_AWS_kn ) )->str ();
+            s_R_T = "R";
+        }
         string WD = "55.3", WS = "8.5";
         if (True) { WD = "44.4"; WS = "9.1"; }
         string nmea = "$VDMWV,";
-        nmea += WD; // 1
+        nmea += s_WD; // 1
         nmea += ',';
-        nmea += R_T; // 2
+        nmea += s_R_T; // 2
         nmea += ',';
-        nmea += WS; // 3
+        nmea += s_WS; // 3
         nmea += ',';
         nmea += "N"; // 4
         nmea += ',';
@@ -432,7 +452,7 @@ void MakeNMEA_VHW() {
         nmea += '\r';
         nmea += '\n';
         int Lens = nmea.size();
-        //memset(VWR_NMEA, NULL, sizeof(NMEA)); //Clear the array
+        memset( MWV_NMEA, NULL, sizeof( MWV_NMEA ) ); //Clear the array
         for (int a = 0; a < Lens; a++) {
             MWV_NMEA[a] = nmea[a];
         }
@@ -685,4 +705,71 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           cout << "New course: " << d_Course << " degrees\n";
           NMEA_HDM(); //Update NMEA message after course change
       }
+  }
+  
+  void CalcWind ( void ) {
+      //True wind
+      d_TWA = d_Course >= 270 ? 360 - d_Course + 270 : 270 - d_Course; //Westerly wind (270)
+      d_TWS_kn = 11.7;
+      double d_TWS = d_TWS_kn / 1.94384; // To m/s
+      //Apparent wind
+      double d_SOG_m = d_SOG / 1.94384; // To m/s
+      //double d_TWA_2Q = 90; // d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA;
+      
+      double d_TWA_2Q = ( ( d_TWA > 180 ? ( d_TWA - 360 ) : d_TWA ) );
+      double Y = d_TWA_2Q * M_PI / 180;
+      double a = d_TWS_kn * cos( Y ); ; // To Rad??
+      double bb = d_TWS_kn * sin( Y ); // To Rad??
+      double b = bb + d_SOG; //mismatch??
+      d_AWS_kn = sqrt( pow( a, 2 ) + pow( b, 2 ) );
+      d_AWA = ( atan( bb / a ) * 180 / M_PI );
+
+      int debug = 1;
+      /*
+Y = 90 – dTW 
+a = TWS cos Y 
+bb = TWS sin Y 
+bb = b + BS 
+AWS = (a^2 + b^2)^1/2
+dAW = 90 – arctan (bb/a) */
+      
+      
+      
+      /*
+      int q = 1;
+      if ( d_TWA >= 0 && d_TWA <= 90 ) { d_TWA_2Q = d_TWA; q = 0; }
+      if ( d_TWA > 90 && d_TWA <= 180 ) { d_TWA_2Q = (d_TWA - 90); q = 90; }
+      if ( d_TWA > 180 && d_TWA <= 270 ) { d_TWA_2Q = ( d_TWA - 180 ); q = 180; }
+      if ( d_TWA > 270 && d_TWA <= 360 ) { d_TWA_2Q = ( d_TWA - 270 ); q = 270; }
+
+      double TWA, x, y;
+      TWA = d_TWA_2Q * M_PI / 180;
+      x = sin( TWA ) * d_TWS_kn;
+      y = cos( TWA ) * d_TWS_kn;
+      //Apparent wind angle
+      d_AWA = q + ( 180 / M_PI ) * atan( x / ( y + d_SOG ) );
+      //(180/3.14159265)*ARCTAN(B14/(B15+B8))
+      //Apparent wind speed
+      d_AWS_kn = x / sin( (d_AWA - q) *M_PI / 180 );
+      //B14/SIN(B19*3.14159265/180)
+      */
+      
+
+
+
+      /*double d_Course_2Q = d_Course > 180 ? -(d_Course - 360) : d_Course; 
+      //double d_Course_2Q = d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA;
+      double d_AWS_m = sqrt( pow( d_TWS, 2 ) + pow( d_SOG_m, 2 ) + ( 2 * d_TWS * d_SOG_m * cos( d_Course_2Q * M_PI / 180 ) ) );
+      d_AWS_kn = d_AWS_m * 1.94384; //To knots
+      //Apparent wind angle
+      //double d_Course_4Q = ((d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA));
+      double d_Course_4Q = ( ( d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA ) );
+      double e = ( ( d_TWS * cos( d_Course_4Q * M_PI / 180 ) ) + d_SOG_m ) / d_AWS_m;
+      double d_AWA_rad = acos ( e );
+      d_AWA = d_AWA_rad * 180.0 / M_PI;//To degr
+
+      double Y, a, b, bb;
+      Y = 90 - d_TWA;
+      a =*/ 
+      
   }
