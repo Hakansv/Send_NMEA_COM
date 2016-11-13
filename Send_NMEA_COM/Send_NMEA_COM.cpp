@@ -24,11 +24,10 @@ double wmm = 3.0; //Variation to calc HDM from Course
 double SecToNextPos = 3.0; //Time, e.g. distance to wait before next posistion change.
 
 //Others
-double d_AWSpeed_kn = 8.5, d_AWS_kn = 5; //App wind speed STÄDA!
-double d_AWangle_W = 270, d_AWA = 270; // App wind angle  STÄDA!
+double d_AWSpeed_kn = 8.5, d_AWS_kn = 5; //App wind speed
+double d_AWangle_W = 270, d_AWA = 270; // App wind angle
 double d_TWS_kn = 8.5; //True Wind speed
 double d_TWA = 270; //True wind angle
-
 double angleRadHeading = 1; //Heading in radians
 double Incr_Pos_Lat = 0.0001;  //Increase of Lat for each moving update.
 double Incr_Pos_Lon = 0.004;  //Increase of Long for each moving update.
@@ -43,11 +42,14 @@ bool esc = false;
 double STW = 6.20;      //STW for VHW
 double STW_Upd = 0.003; //STW incr. each cycle
 bool Quit = false;
-bool T = false;
-bool hideNMEA = false;
+bool TorR = false;
+bool hideNMEA = true;
 clock_t PosTimer = clock();
+clock_t LastWindMes = clock();
 //TODO check if found:
 string userdata = getenv("USERPROFILE");
+HANDLE hSerial; //COM port handler
+DWORD bytes_written, total_bytes_written = 0;
 
 //Functions
 void CalculateNewPos(double, double);
@@ -75,14 +77,11 @@ int main()
 {
     cout << msg;
     // Define some static NMEA messages
-    //char Head[] = "$HCHDM,030.4,M\r\n";
-	//char NMEA[] = "$GPRMC,123519,A,5326.038,N,00611.000,E,005.4,084.4,230394,,W\r\n" ;
     char NMEA_MTW[] = "$IIMTW,14.7,C*11\r\n";
     char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
    
     // Declare variables and structures
     bool Last = false;
-    HANDLE hSerial;
     DCB dcbSerialParams = {0};
     COMMTIMEOUTS timeouts = {0};
     char s[20];
@@ -199,26 +198,41 @@ int main()
     }
     FormatCourseData();
         
-    DWORD bytes_written, total_bytes_written = 0;
     fprintf_s(stderr, "\n         Sending bytes...\n");
     PrintUserInfo();
     NMEA_HDM(); //Make the HDM sentance.
     
-    CalcWind ();
-
     while (!esc) { //Quit on Esc or space
         if (_kbhit()){ //Check for a key press to exit the program or enter a new course
             OnKeyPress();
         }
-
+        if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next mes.
+            CalcWind();
+            MakeNMEA_MWV( TorR ); //Make the MWV and alter between R and T.
+            TorR = !TorR;
+            LastWindMes = clock();
+            //Send MWV > Wind speeed and realtive angle
+            if ( !WriteFile( hSerial, MWV_NMEA, strlen( MWV_NMEA ), &bytes_written, NULL ) ) {
+                fprintf_s( stderr, "Error. Hit a key to exit\n" );
+                CloseHandle( hSerial );
+                int Dummy = toupper( _getch() );
+                return 1;
+            }
+            if ( !hideNMEA ) fprintf_s( stderr, MWV_NMEA ); //\n finns i strängen
+        }
+        
         Sleep (PauseTime);
         if (Last) {
-            if (((clock() - PosTimer) / CLOCKS_PER_SEC) < SecToNextPos) continue; // Wait for enough distance to calc pos.
+            if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) < SecToNextPos ) {
+                continue; // Wait for enough distance to calc a new pos.
+            }
             if (InfoCount > 10) { PrintUserInfo(); InfoCount = 0; }
             if (!hideNMEA ) InfoCount++;
+            
             MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
+
         Last = !Last; //Alter between the two every turn
         if(!WriteFile(hSerial, NMEA, strlen(NMEA), &bytes_written, NULL))
         {
@@ -228,11 +242,9 @@ int main()
             int Dummy = toupper(_getch());
             return 1;
         }  
-
          //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
-         if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
-        
-         if (Last) continue; //Send the rest NMEA mess every second turn only.
+        if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
+        if (Last) continue; //Send the rest NMEA mess every second turn only.
     
         Sleep (PauseTime);
 	     if(!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL))
@@ -265,21 +277,7 @@ int main()
              return 1;
          }
          if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
-
-         //Send MWV > Wind speeed and realtive angle
-         Sleep(PauseTime);
-         if (!WriteFile(hSerial, MWV_NMEA, strlen(MWV_NMEA), &bytes_written, NULL))
-         {
-             fprintf_s(stderr, "Error. Hit a key to exit\n");
-             CloseHandle(hSerial);
-             int Dummy = toupper(_getch());
-             return 1;
-         }
-         if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
          
-         CalcWind ();
-         MakeNMEA_MWV(T); //Make the MWV in every turn and alter between R and T.
-         T = !T;
 } //End of while()
 
     // Close serial port
@@ -422,11 +420,11 @@ void MakeNMEA_VHW() {
         5. Status, A = Data Valid
         6. Checksum*/
 
-    void MakeNMEA_MWV(bool True) {
+    void MakeNMEA_MWV(bool b_True) {
         string s_WD = "";
         string s_WS = "";
-        string s_R_T = True ? "T" : "R";
-        if ( True ) {
+        string s_R_T; // = b_True ? "T" : "R";
+        if ( b_True ) {
             s_WD = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_TWA ) )->str ();
             s_WS = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_TWS_kn ) )->str ();
             s_R_T = "T";
@@ -435,8 +433,8 @@ void MakeNMEA_VHW() {
             s_WS = static_cast<ostringstream*>( &( ostringstream () << setprecision ( 3 ) << fixed << d_AWS_kn ) )->str ();
             s_R_T = "R";
         }
-        string WD = "55.3", WS = "8.5";
-        if (True) { WD = "44.4"; WS = "9.1"; }
+        //string WD = "55.3", WS = "8.5";
+        //if ( b_True ) { WD = "44.4"; WS = "9.1"; }
         string nmea = "$VDMWV,";
         nmea += s_WD; // 1
         nmea += ',';
@@ -456,6 +454,7 @@ void MakeNMEA_VHW() {
         for (int a = 0; a < Lens; a++) {
             MWV_NMEA[a] = nmea[a];
         }
+        
 }
 
 // Calculates the Checksum for the NMEA string
@@ -660,7 +659,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   void PrintUserInfo(void) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
           << "     Hit + or - to instantly change course 10 degr up or down\n"
-          << "     Hit P to hide/show NMEA messaging to screen\n"
+          << "     Hit P to show or hide NMEA messaging to screen\n"
           << "     Hit any other key to change the initial course to a new value.\n\n";
   }
 
@@ -684,10 +683,10 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       case 'P':
           pIsTouched = true;
           if (!hideNMEA) {
-              cout << "\n  NMEA printing to screen is disabled. Hit P again to reset\n";
+              cout << "\n  NMEA printing to screen is disabled. Hit P to view\n";
               PrintUserInfo();
           }
-          else cout << "  Print NMEA again\n";
+          else cout << "  Printing NMEA to screen\n";
           hideNMEA = !hideNMEA;
           break;
       default:
@@ -707,69 +706,32 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       }
   }
   
-  void CalcWind ( void ) {
+  void CalcWind( void ) {
+      double TWA, x, y;
+      int q = 1, m = 1;
       //True wind
       d_TWA = d_Course >= 270 ? 360 - d_Course + 270 : 270 - d_Course; //Westerly wind (270)
       d_TWS_kn = 11.7;
-      double d_TWS = d_TWS_kn / 1.94384; // To m/s
+      //double d_TWS = d_TWS_kn / 1.94384; // To m/s
       //Apparent wind
-      double d_SOG_m = d_SOG / 1.94384; // To m/s
-      //double d_TWA_2Q = 90; // d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA;
-      
-      double d_TWA_2Q = ( ( d_TWA > 180 ? ( d_TWA - 360 ) : d_TWA ) );
-      double Y = d_TWA_2Q * M_PI / 180;
-      double a = d_TWS_kn * cos( Y ); ; // To Rad??
-      double bb = d_TWS_kn * sin( Y ); // To Rad??
-      double b = bb + d_SOG; //mismatch??
-      d_AWS_kn = sqrt( pow( a, 2 ) + pow( b, 2 ) );
-      d_AWA = ( atan( bb / a ) * 180 / M_PI );
-
-      int debug = 1;
-      /*
-Y = 90 – dTW 
-a = TWS cos Y 
-bb = TWS sin Y 
-bb = b + BS 
-AWS = (a^2 + b^2)^1/2
-dAW = 90 – arctan (bb/a) */
-      
-      
-      
-      /*
-      int q = 1;
-      if ( d_TWA >= 0 && d_TWA <= 90 ) { d_TWA_2Q = d_TWA; q = 0; }
-      if ( d_TWA > 90 && d_TWA <= 180 ) { d_TWA_2Q = (d_TWA - 90); q = 90; }
-      if ( d_TWA > 180 && d_TWA <= 270 ) { d_TWA_2Q = ( d_TWA - 180 ); q = 180; }
-      if ( d_TWA > 270 && d_TWA <= 360 ) { d_TWA_2Q = ( d_TWA - 270 ); q = 270; }
-
-      double TWA, x, y;
-      TWA = d_TWA_2Q * M_PI / 180;
+      double d_TWA_2Q = ( ( d_TWA > 180 ? 180 - ( d_TWA - 180 ) : d_TWA ) );
+      //Upwind
+      if ( d_TWA >= 0 && d_TWA <= 90 ) { d_TWA_2Q = d_TWA; q = 0; m = 1; }
+      if ( d_TWA > 270 && d_TWA <= 360 ) { d_TWA_2Q = 90 - ( d_TWA - 270 ); q = 360; m = 1; }
+      //Downwind
+      if ( d_TWA > 90 && d_TWA <= 180 ) { d_TWA_2Q = 90 - ( d_TWA - 90 ); q = 180; m = -1; }
+      if ( d_TWA > 180 && d_TWA <= 270 ) { d_TWA_2Q = 270 - ( d_TWA - 270 ); q = 180; m = -1; }
+      TWA = ( m*d_TWA_2Q * M_PI / 180 );
       x = sin( TWA ) * d_TWS_kn;
       y = cos( TWA ) * d_TWS_kn;
       //Apparent wind angle
-      d_AWA = q + ( 180 / M_PI ) * atan( x / ( y + d_SOG ) );
-      //(180/3.14159265)*ARCTAN(B14/(B15+B8))
+      double d_AWA_Q = 0.1+( 180 / M_PI ) * atan( x / ( y + ( d_SOG ) ) );
+      if ( m > 0 ) { //Upwind
+          d_AWA = q ? q - d_AWA_Q : d_AWA_Q;
+      } else {       //Downwind
+          d_AWA = d_TWA - ( ( 360 + ( (d_AWA_Q)-q ) ) - d_TWA );
+      }
       //Apparent wind speed
-      d_AWS_kn = x / sin( (d_AWA - q) *M_PI / 180 );
-      //B14/SIN(B19*3.14159265/180)
-      */
-      
-
-
-
-      /*double d_Course_2Q = d_Course > 180 ? -(d_Course - 360) : d_Course; 
-      //double d_Course_2Q = d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA;
-      double d_AWS_m = sqrt( pow( d_TWS, 2 ) + pow( d_SOG_m, 2 ) + ( 2 * d_TWS * d_SOG_m * cos( d_Course_2Q * M_PI / 180 ) ) );
-      d_AWS_kn = d_AWS_m * 1.94384; //To knots
-      //Apparent wind angle
-      //double d_Course_4Q = ((d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA));
-      double d_Course_4Q = ( ( d_TWA > 180 ? -( d_TWA - 360 ) : d_TWA ) );
-      double e = ( ( d_TWS * cos( d_Course_4Q * M_PI / 180 ) ) + d_SOG_m ) / d_AWS_m;
-      double d_AWA_rad = acos ( e );
-      d_AWA = d_AWA_rad * 180.0 / M_PI;//To degr
-
-      double Y, a, b, bb;
-      Y = 90 - d_TWA;
-      a =*/ 
-      
-  }
+      double d_AWS_part = ( x / ( sin( (d_AWA_Q)*M_PI / 180 ) ) );
+      d_AWS_kn = d_TWS_kn + m * ( d_AWS_part - d_TWS_kn ); //Downwind it's negative
+}
