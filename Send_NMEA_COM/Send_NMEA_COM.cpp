@@ -43,7 +43,8 @@ double STW = 6.20;      //STW for VHW
 double STW_Upd = 0.003; //STW incr. each cycle
 bool Quit = false;
 bool TorR = false;
-bool hideNMEA = true;
+bool hideNMEA = false;
+bool firstRunOK = false;
 clock_t PosTimer = clock();
 clock_t LastWindMes = clock();
 //TODO check if found:
@@ -206,7 +207,7 @@ int main()
         if (_kbhit()){ //Check for a key press to exit the program or enter a new course
             OnKeyPress();
         }
-        if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next mes.
+        if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next MWV mes.
             CalcWind();
             MakeNMEA_MWV( TorR ); //Make the MWV and alter between R and T.
             TorR = !TorR;
@@ -220,16 +221,22 @@ int main()
             }
             if ( !hideNMEA ) fprintf_s( stderr, MWV_NMEA ); //\n finns i strängen
         }
-        
-        Sleep (PauseTime);
-        if (Last) {
-            if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) < SecToNextPos ) {
-                continue; // Wait for enough distance to calc a new pos.
-            }
-            if (InfoCount > 10) { PrintUserInfo(); InfoCount = 0; }
-            if (!hideNMEA ) InfoCount++;
+        if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos ) {
+            //continue;
+            CalculateNewPos( d_Lat, d_long ); // Wait for enough distance to calc a new pos.
+        }
+        if (InfoCount > 30) { PrintUserInfo(); InfoCount = 0; }
+        if ( !firstRunOK && InfoCount > 3 ) {
+            cout << "\nOK It seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
+            firstRunOK = !firstRunOK;
+            hideNMEA = !hideNMEA;
+            PrintUserInfo();
+        }
+        if ( !hideNMEA ) InfoCount++;
             
-            MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
+        Sleep( PauseTime );
+        if ( Last ) {
+                MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
 
@@ -303,7 +310,7 @@ void MakeNMEA() {
         if (d_Lat > (Def_Lat + 70)) d_Lat = Def_Lat;
     }
     else {
-        CalculateNewPos(d_Lat, d_long);
+        //CalculateNewPos(d_Lat, d_long);
     }
     
   string s_Lat = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Lat))->str();
