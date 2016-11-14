@@ -222,7 +222,7 @@ int main()
         
         if (InfoCount > 30) { PrintUserInfo(); InfoCount = 0; }
         if ( !firstRunOK && InfoCount > 2 ) {
-            cout << "\nOK It seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
+            cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
             firstRunOK = true;
             hideNMEA = !hideNMEA;
             PrintUserInfo();
@@ -702,6 +702,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   void CalcWind( void ) {
       double TWA, x, y;
       int q = 1, m = 1;
+      bool zerofix = false;
       //True wind
       d_TWA = d_Course >= 270 ? 360 - d_Course + 270 : 270 - d_Course; //Westerly wind (270)
       d_TWS_kn = 11.7;
@@ -714,10 +715,16 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       //Downwind
       if ( d_TWA > 90 && d_TWA <= 180 ) { d_TWA_2Q = 90 - ( d_TWA - 90 ); q = 180; m = -1; }
       if ( d_TWA > 180 && d_TWA <= 270 ) { d_TWA_2Q = 270 - ( d_TWA - 270 ); q = 180; m = -1; }
-      if ( d_TWA_2Q == 0 ) d_TWA_2Q += 1; //Avoid the nasty zero
+      
+      if ( d_TWA_2Q == 0 ) { //Avoid the nasty zero
+          d_TWA_2Q += 1; 
+          zerofix = true; 
+      }
+
       TWA = ( m * d_TWA_2Q * M_PI / 180 );
       x = sin( TWA ) * d_TWS_kn;
       y = cos( TWA ) * d_TWS_kn;
+      
       //Apparent wind angle
       double d_AWA_Q = 0.1+( 180 / M_PI ) * atan( x / ( y + ( d_SOG ) ) );
       if ( m > 0 ) { //Upwind
@@ -725,6 +732,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       } else {       //Downwind
           d_AWA = d_TWA - ( ( 360 + ( (d_AWA_Q)-q ) ) - d_TWA );
       }
+      if ( zerofix )d_AWA > 359 ? d_AWA = 0 : d_AWA -= 1;
+
       //Apparent wind speed
       double d_AWS_part = ( x / ( sin( (d_AWA_Q)*M_PI / 180 ) ) );
       d_AWS_kn = d_TWS_kn + m * ( d_AWS_part - d_TWS_kn ); //Downwind it's negative
