@@ -714,7 +714,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       //Downwind
       if ( d_TWA > 90 && d_TWA <= 180 ) { d_TWA_2Q = 90 - ( d_TWA - 90 ); q = 180; m = -1; }
       if ( d_TWA > 180 && d_TWA <= 270 ) { d_TWA_2Q = 270 - ( d_TWA - 270 ); q = 180; m = -1; }
-      TWA = ( m*d_TWA_2Q * M_PI / 180 );
+      if ( d_TWA_2Q == 0 ) d_TWA_2Q += 1; //Avoid the nasty zero
+      TWA = ( m * d_TWA_2Q * M_PI / 180 );
       x = sin( TWA ) * d_TWS_kn;
       y = cos( TWA ) * d_TWS_kn;
       //Apparent wind angle
