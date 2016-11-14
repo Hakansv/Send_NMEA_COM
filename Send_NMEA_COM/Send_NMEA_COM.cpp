@@ -24,10 +24,10 @@ double wmm = 3.0; //Variation to calc HDM from Course
 double SecToNextPos = 3.0; //Time, e.g. distance to wait before next posistion change.
 
 //Others
-double d_AWSpeed_kn = 8.5, d_AWS_kn = 5; //App wind speed
-double d_AWangle_W = 270, d_AWA = 270; // App wind angle
+double d_AWS_kn = 5; //App wind speed
+double d_AWA = 270; // App wind angle
 double d_TWS_kn = 8.5; //True Wind speed
-double d_TWA = 270; //True wind angle
+double d_TWA = 275; //True wind angle
 double angleRadHeading = 1; //Heading in radians
 double Incr_Pos_Lat = 0.0001;  //Increase of Lat for each moving update.
 double Incr_Pos_Lon = 0.004;  //Increase of Long for each moving update.
@@ -37,7 +37,6 @@ int InfoCount = 0;
 int testsum(string);
 char NMEA[80], HDM_NMEA[50], MWV_NMEA[50];
 double d_long = Def_Long, d_Lat = Def_Lat;
-bool b_Move = false;
 bool esc = false;
 double STW = 6.20;      //STW for VHW
 double STW_Upd = 0.003; //STW incr. each cycle
@@ -190,29 +189,25 @@ int main()
         return 1;
     }
  
-    // Send specified text (remaining command line arguments)
-    _cputs( "\nHit key \"y\" to get a calculated position based on given speed and Course.\nAny other key gives a dummy moving position\n" );
-    if (toupper(_getch()) == 'Y') {
-        GetNavData();
-    } else { 
-        b_Move = true; 
-    }
+    GetNavData();        //Ask if Navdata from file shall be changed.
     FormatCourseData();
         
-    fprintf_s(stderr, "\n         Sending bytes...\n");
-    PrintUserInfo();
+    fprintf_s(stderr, "\nSending bytes........................\n\n");
+    //PrintUserInfo();
     NMEA_HDM(); //Make the HDM sentance.
     
     while (!esc) { //Quit on Esc or space
-        if (_kbhit()){ //Check for a key press to exit the program or enter a new course
+        if (_kbhit()){ //Check the buffer for a key press to exit the program or enter a new course
             OnKeyPress();
         }
+
         if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next MWV mes.
             CalcWind();
             MakeNMEA_MWV( TorR ); //Make the MWV and alter between R and T.
             TorR = !TorR;
             LastWindMes = clock();
             //Send MWV > Wind speeed and realtive angle
+            Sleep( PauseTime ); //Let COM port buffer be empty
             if ( !WriteFile( hSerial, MWV_NMEA, strlen( MWV_NMEA ), &bytes_written, NULL ) ) {
                 fprintf_s( stderr, "Error. Hit a key to exit\n" );
                 CloseHandle( hSerial );
@@ -221,27 +216,27 @@ int main()
             }
             if ( !hideNMEA ) fprintf_s( stderr, MWV_NMEA ); //\n finns i strängen
         }
-        if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos ) {
-            //continue;
+
+        if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos )
             CalculateNewPos( d_Lat, d_long ); // Wait for enough distance to calc a new pos.
-        }
+        
         if (InfoCount > 30) { PrintUserInfo(); InfoCount = 0; }
-        if ( !firstRunOK && InfoCount > 3 ) {
+        if ( !firstRunOK && InfoCount > 2 ) {
             cout << "\nOK It seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
-            firstRunOK = !firstRunOK;
+            firstRunOK = true;
             hideNMEA = !hideNMEA;
             PrintUserInfo();
         }
         if ( !hideNMEA ) InfoCount++;
             
-        Sleep( PauseTime );
         if ( Last ) {
                 MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
 
         Last = !Last; //Alter between the two every turn
-        if(!WriteFile(hSerial, NMEA, strlen(NMEA), &bytes_written, NULL))
+        Sleep( PauseTime ); //Let COM port buffer be empty
+        if ( !WriteFile( hSerial, NMEA, strlen( NMEA ), &bytes_written, NULL ) )
         {
             cout << bytes_written << " Bytes written \n";
             fprintf_s(stderr, "Error print NMEA\n");
@@ -303,16 +298,7 @@ int main()
 
 
 void MakeNMEA() { 
-    if (b_Move) {
-        d_long = d_long - Incr_Pos_Lon;
-        if (d_long > (Def_Long + 70)) d_long = Def_Long;
-        if (b_Move) d_Lat = d_Lat + Incr_Pos_Lat;
-        if (d_Lat > (Def_Lat + 70)) d_Lat = Def_Lat;
-    }
-    else {
-        //CalculateNewPos(d_Lat, d_long);
-    }
-    
+        
   string s_Lat = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Lat))->str();
   string s_Long = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_long))->str();
   string s_d_SOG = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_SOG))->str();
@@ -536,7 +522,6 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
     return Dec_degs;
 }
 
-
   double DegrPosToNMEAPos(double Pos_in, int LL ) {
       
       if (Pos_in < 0) {
@@ -566,7 +551,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       _cputs("\n\nHit key \"y\" to accept above values. Any other key will let you change them, one by one.\n\n");
       if (toupper(_getch()) == 'Y') {
           b_PrintNavD = false;
-          cout << "Present Navdata accepted\n\n";
+          cout << "Present Navdata accepted\n";
       } else {
           cout << "Enter a latitude instead of: " << d_Lat << ". Enter any char a-z to skip to next\n";
           double test = GetUserInput(d_Lat, -90, 90);
@@ -663,6 +648,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       }
       else cout << "Sorry, Unable to create file directory: " << filePath << "\n";
   }
+
   void PrintUserInfo(void) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
           << "     Hit + or - to instantly change course 10 degr up or down\n"
