@@ -29,14 +29,13 @@ double d_AWA = 270; // App wind angle
 double d_TWS_kn = 8.5; //True Wind speed
 double d_TWA = 270; //True wind angle
 double d_TWA_init = 310; //True wind angle
+double d_DBT = 5.5; //Depth
 double angleRadHeading = 1; //Heading in radians
-double Incr_Pos_Lat = 0.0001;  //Increase of Lat for each moving update.
-double Incr_Pos_Lon = 0.004;  //Increase of Long for each moving update.
 double M_PI = 3.141592654;
 int PauseTime = 175;  //Pause between each transmitt
 int InfoCount = 0;
 int testsum(string);
-char NMEA[80], HDM_NMEA[50], MWV_NMEA[50];
+char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT[50];
 double d_long = Def_Long, d_Lat = Def_Lat;
 bool esc = false;
 double STW = 6.20;      //STW for VHW
@@ -64,6 +63,7 @@ void MakeNMEA(void);
 void MakeNMEA_VHW();
 void NMEA_HDM(void);
 void MakeNMEA_MWV(bool);
+void MakeNMEA_DBT( void );
 double GetUserInput(double, int, int);
 void ReadNavData(void);
 void WriteNavdata(void);
@@ -79,7 +79,7 @@ int main()
     cout << msg;
     // Define some static NMEA messages
     char NMEA_MTW[] = "$IIMTW,14.7,C*11\r\n";
-    char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
+    //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
    
     // Declare variables and structures
     bool Last = false;
@@ -221,7 +221,10 @@ int main()
         if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos )
             CalculateNewPos( d_Lat, d_long ); // Wait for enough distance to calc a new pos.
         
-        if (InfoCount > 30) { PrintUserInfo(); InfoCount = 0; }
+        if (InfoCount > 30) { 
+            PrintUserInfo();
+            InfoCount = 0;
+        }
         if ( !firstRunOK && InfoCount > 2 ) {
             cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
             firstRunOK = true;
@@ -231,7 +234,7 @@ int main()
         if ( !hideNMEA ) InfoCount++;
             
         if ( Last ) {
-                MakeNMEA(); //Make the RMC sentance, if "move" update each turn.
+                MakeNMEA(); //Make the RMC sentance.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
 
@@ -247,8 +250,8 @@ int main()
         }  
          //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
         if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
-        if (Last) continue; //Send the rest NMEA mess every second turn only.
-    
+        
+        if (Last) continue; //Send the rest NMEA mess every second turn only.    
         Sleep (PauseTime);
 	     if(!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL))
         {
@@ -272,6 +275,7 @@ int main()
          
          //Send NMEA_DBT > Depth
          Sleep(PauseTime);
+         MakeNMEA_DBT();
          if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL))
          {
              fprintf_s(stderr, "Error. Hit a key to exit\n");
@@ -300,8 +304,8 @@ int main()
 
 void MakeNMEA() { 
         
-  string s_Lat = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_Lat))->str();
-  string s_Long = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_long))->str();
+  string s_Lat = static_cast<ostringstream*>(&(ostringstream() << setprecision(4) << fixed << d_Lat))->str();
+  string s_Long = static_cast<ostringstream*>(&(ostringstream() << setprecision(4) << fixed << d_long))->str();
   string s_d_SOG = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_SOG))->str();
   string nmea = "$GPRMC,";
   nmea += "123519,";    //Time
@@ -451,6 +455,35 @@ void MakeNMEA_VHW() {
         
 }
 
+    //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
+     void MakeNMEA_DBT(void) {
+         d_DBT = d_DBT > 15.6 ? d_DBT = 5.2 : d_DBT = d_DBT += 0.05;
+         string s_depth = static_cast<ostringstream*>( &( ostringstream() << setprecision( 3 ) << fixed << d_DBT ) )->str();
+        
+        string nmea = "$IIDBT,";
+        nmea += ""; // 1. Depth, feet
+        nmea += ',';
+        nmea += "f"; // 2. f = feet
+        nmea += ',';
+        nmea += s_depth; // 3. Depth, meters
+        nmea += ',';
+        nmea += "M"; // 4. M = meters
+        nmea += ',';
+        nmea += ""; // 5. Depth, Fathoms
+        nmea += ',';
+        nmea += "F"; // 6. F = Fathoms
+        nmea += '*';
+        nmea += static_cast<ostringstream*>(&(ostringstream() << hex << testsum(nmea)))->str();
+        nmea += '\r';
+        nmea += '\n';
+        int Lens = nmea.size();
+        memset( NMEA_DBT, NULL, sizeof( NMEA_DBT ) ); //Clear the array
+        for (int a = 0; a < Lens; a++) {
+            NMEA_DBT[a] = nmea [a];
+        }
+        
+}
+   
 // Calculates the Checksum for the NMEA string
 int testsum(string strN) {
 int i;
@@ -712,8 +745,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       }
       if (!esc && !pIsTouched) {
           FormatCourseData();
-          cout << "New course: " << d_Course << " degrees\n";
-          NMEA_HDM(); //Update NMEA message after course change
+          cout << "New course: " << d_Course << " degrees\n";          
       }
   }
   
