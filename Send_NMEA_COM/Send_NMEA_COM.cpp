@@ -27,7 +27,8 @@ double SecToNextPos = 3.0; //Time, e.g. distance to wait before next posistion c
 double d_AWS_kn = 5; //App wind speed
 double d_AWA = 270; // App wind angle
 double d_TWS_kn = 8.5; //True Wind speed
-double d_TWA = 275; //True wind angle
+double d_TWA = 270; //True wind angle
+double d_TWA_init = 310; //True wind angle
 double angleRadHeading = 1; //Heading in radians
 double Incr_Pos_Lat = 0.0001;  //Increase of Lat for each moving update.
 double Incr_Pos_Lon = 0.004;  //Increase of Long for each moving update.
@@ -600,8 +601,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       ifstream myfile(filePath);
       if (myfile.is_open())
       {
-          string s_Nav[5];
-          for (int i = 0; i < 5; ++i)
+          string s_Nav[7];
+          for (int i = 0; i < 7; ++i)
           {
               if (myfile.eof()) {
                   file_eof = true;
@@ -615,6 +616,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
               d_Course = std::stod(s_Nav[2]);
               wmm = std::stod(s_Nav[3]);
               d_SOG = std::stod(s_Nav[4]);
+              d_TWA_init = std::stod( s_Nav [5] );
+              d_TWS_kn = std::stod( s_Nav [6] );
           }
           myfile.close();
       }
@@ -641,6 +644,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
               myfile << d_Course << "\n";
               myfile << wmm << "\n";
               myfile << d_SOG << "\n";
+              myfile << d_TWA_init << "\n";
+              myfile << d_TWS_kn << "\n";
               myfile.close();
               cout << "\n" << "New Navdata was saved to:\n" << filePath << "\n";
           }
@@ -658,6 +663,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
 
   void OnKeyPress(void) {
       char key = _getch();
+      cout << key << "\n";
       bool pIsTouched = false;
       switch (key) {
       case 27:
@@ -682,6 +688,18 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           else cout << "  Printing NMEA to screen\n";
           hideNMEA = !hideNMEA;
           break;
+      case '?':
+          d_TWA_init += 10;
+          if ( d_TWA_init > 360 ) d_TWA_init = d_TWA_init - 360;
+          pIsTouched = true; //Like
+          cout << "True Wind changed\n";
+          break;
+      case '_':
+          d_TWA_init -= 10;
+          if ( d_TWA_init < 0 ) d_TWA_init = 360 + d_TWA_init;
+          pIsTouched = true; // Like
+          cout << "True Wind changed\n";
+          break;
       default:
           string keys;
           cout << "Enter a new course instead of: " << d_Course << " Or any letter to quit\n";
@@ -704,7 +722,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       int q = 1, m = 1;
       bool zerofix = false;
       //True wind
-      d_TWA = d_Course >= 270 ? 360 - d_Course + 270 : 270 - d_Course; //Westerly wind (270)
+      if ( d_TWA_init < 1 || d_TWA_init > 359 ) d_TWA_init = 5; // Avoid zero
+      d_TWA = d_Course >= d_TWA_init ? 360 - d_Course + d_TWA_init : d_TWA_init - d_Course;
       d_TWS_kn = 11.7;
       //double d_TWS = d_TWS_kn / 1.94384; // To m/s
       //Apparent wind
