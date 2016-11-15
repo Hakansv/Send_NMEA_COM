@@ -457,7 +457,7 @@ void MakeNMEA_VHW() {
 
     //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
      void MakeNMEA_DBT(void) {
-         d_DBT = d_DBT > 15.6 ? d_DBT = 5.2 : d_DBT = d_DBT += 0.05;
+         d_DBT = d_DBT > 15.6 ? d_DBT = 5.2 : d_DBT = d_DBT += 0.03;
          string s_depth = static_cast<ostringstream*>( &( ostringstream() << setprecision( 3 ) << fixed << d_DBT ) )->str();
         
         string nmea = "$IIDBT,";
@@ -745,7 +745,8 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       }
       if (!esc && !pIsTouched) {
           FormatCourseData();
-          cout << "New course: " << d_Course << " degrees\n";          
+          cout << "New course: " << d_Course << " degrees\n";
+          NMEA_HDM(); //Update NMEA message after course change
       }
   }
   
