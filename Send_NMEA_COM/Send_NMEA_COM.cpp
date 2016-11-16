@@ -21,7 +21,7 @@ double d_SOG = 6.5;    //Speed to run
 double Def_Lat = 5803.200, Def_Long = 01122.100; //NMEA-Format!! Initial position for the cruise, N/E :)
 string N_S = "N", E_W = "E";
 double wmm = 3.0; //Variation to calc HDM from Course
-double SecToNextPos = 3.0; //Time, e.g. distance to wait before next posistion change.
+double SecToNextPos = 2.5; //Time, e.g. distance to wait before next posistion change.
 
 //Others
 double d_AWS_kn = 5; //App wind speed
@@ -31,8 +31,9 @@ double d_TWA = 270; //True wind angle
 double d_TWA_init = 310; //True wind angle
 double d_DBT = 5.5; //Depth
 double angleRadHeading = 1; //Heading in radians
+double d_CourseTemp = 0;  //Temp course to save
 double M_PI = 3.141592654;
-int PauseTime = 175;  //Pause between each transmitt
+int PauseTime = 150;  //Pause between each transmitt
 int InfoCount = 0;
 int testsum(string);
 char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT[50];
@@ -44,8 +45,10 @@ bool Quit = false;
 bool TorR = false;
 bool hideNMEA = false;
 bool firstRunOK = false;
+bool RadarHeading = false, RAHeadIsValid = false;
 clock_t PosTimer = clock();
 clock_t LastWindMes = clock();
+clock_t LastHDTMes = clock();
 //TODO check if found:
 string userdata = getenv("USERPROFILE");
 HANDLE hSerial; //COM port handler
@@ -70,13 +73,17 @@ void WriteNavdata(void);
 void FormatCourseData(void);
 void PrintUserInfo(void);
 void OnKeyPress(void);
-
+int getNbrOfBytes( void );
+void ReadSerial( void );
+void StopNMEACourse( void );
 enum Lat_long { LAT = 1, LON = 2};
-string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n" ;
+
+string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n";
+string msg1 = "And read NMEA RAHDT from the same port and if available using it as course\n";
 
 int main()
 {
-    cout << msg;
+    cout << msg << msg1;
     // Define some static NMEA messages
     char NMEA_MTW[] = "$IIMTW,14.7,C*11\r\n";
     //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
@@ -198,17 +205,13 @@ int main()
     NMEA_HDM(); //Make the HDM sentance.
     
     while (!esc) { //Quit on Esc or space
-        if (_kbhit()){ //Check the buffer for a key press to exit the program or enter a new course
-            OnKeyPress();
-        }
-
+        
         if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next MWV mes.
             CalcWind();
             MakeNMEA_MWV( TorR ); //Make the MWV and alter between R and T.
             TorR = !TorR;
             LastWindMes = clock();
             //Send MWV > Wind speeed and realtive angle
-            Sleep( PauseTime ); //Let COM port buffer be empty
             if ( !WriteFile( hSerial, MWV_NMEA, strlen( MWV_NMEA ), &bytes_written, NULL ) ) {
                 fprintf_s( stderr, "Error. Hit a key to exit\n" );
                 CloseHandle( hSerial );
@@ -237,7 +240,7 @@ int main()
                 MakeNMEA(); //Make the RMC sentance.
         }
         else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
-
+        
         Last = !Last; //Alter between the two every turn
         Sleep( PauseTime ); //Let COM port buffer be empty
         if ( !WriteFile( hSerial, NMEA, strlen( NMEA ), &bytes_written, NULL ) )
@@ -284,7 +287,13 @@ int main()
              return 1;
          }
          if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
+
+         ReadSerial(); //Read serial port for NMEA messages
          
+         if ( _kbhit() ) { //Check the buffer for a key press to exit the program or enter a new course
+             OnKeyPress();
+         }
+
 } //End of while()
 
     // Close serial port
@@ -370,8 +379,6 @@ Field Number:
 9. Checksum
 */
 void MakeNMEA_VHW() {
-    /*if (STW < 8) STW += STW_Upd;
-    else STW = 6.8;*/
     STW = d_SOG + 0.3;
     double STW_k = STW;  // /0.53995;
     string s_STW = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << STW))->str();
@@ -452,7 +459,6 @@ void MakeNMEA_VHW() {
         for (int a = 0; a < Lens; a++) {
             MWV_NMEA[a] = nmea[a];
         }
-        
 }
 
     //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
@@ -481,7 +487,6 @@ void MakeNMEA_VHW() {
         for (int a = 0; a < Lens; a++) {
             NMEA_DBT[a] = nmea [a];
         }
-        
 }
    
 // Calculates the Checksum for the NMEA string
@@ -691,6 +696,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
           << "     Hit + or - to instantly change course 10 degr up or down\n"
           << "     Hit P to show or hide NMEA messaging to screen\n"
+          << "     Hit R to read or stop reading the course from serial NMEA RAHDT message\n"
           << "     Hit any other key to change the initial course to a new value.\n\n";
   }
 
@@ -702,12 +708,35 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       case 27:
       case 32:
           esc = true;
+          if ( d_CourseTemp > 0 ) {
+              ReadNavData();
+              d_Course = d_CourseTemp;
+              WriteNavdata();
+          }
+          break;
+      case 'R':
+      case 'r':
+          if ( RAHeadIsValid && !RadarHeading) {
+              RadarHeading = true; //Read course from serial NMEA
+              pIsTouched = true;
+              cout << "Now reading course from radar NMEA\n";
+              break;
+          } else if ( RadarHeading ) {
+              RadarHeading = false;
+              pIsTouched = true;
+              cout << "Stop reading new course from serial NMEA\n";
+              break;
+              }
+          cout << "No radar heading available.\n";
+          pIsTouched = true;
           break;
       case '+':
+          if ( RadarHeading ) break;// No course change while heading from radar
           d_Course += 10;
           if (d_Course > 360) d_Course = d_Course - 360;
           break;
       case '-':
+          if ( RadarHeading ) break;// No course change while heading from radar
           d_Course -= 10;
           if (d_Course < 0) d_Course = 360 + d_Course;
           break;
@@ -734,16 +763,17 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           cout << "True Wind changed\n";
           break;
       default:
+         if ( RadarHeading ) break; // No course change while heading from radar
           string keys;
           cout << "Enter a new course instead of: " << d_Course << " Or any letter to quit\n";
           double NewCourse = d_Course;
           NewCourse = GetUserInput(NewCourse, 0, 360);
           if (NewCourse) {
               d_Course = NewCourse;
-              WriteNavdata();  //Safe the new course in config file
+              d_CourseTemp = d_Course;  //Save the new course in temp.
           }
       }
-      if (!esc && !pIsTouched) {
+      if ( !esc && !pIsTouched && !RadarHeading ) {
           FormatCourseData();
           cout << "New course: " << d_Course << " degrees\n";
           NMEA_HDM(); //Update NMEA message after course change
@@ -790,3 +820,68 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       double d_AWS_part = ( x / ( sin( (d_AWA_Q)*M_PI / 180 ) ) );
       d_AWS_kn = d_TWS_kn + m * ( d_AWS_part - d_TWS_kn ); //Downwind it's negative
 }
+
+  void ReadSerial( void ) {
+      DWORD dwReading = 0;
+      size_t pos = 0;
+      string s;
+      string delimiter = ",";
+      string token [8];
+      char recbuf [50];
+      int bytestoread = 0, y = 0;
+      
+
+      if ( ( bytestoread = getNbrOfBytes() ) > 1 ) {
+          if ( ReadFile( hSerial, recbuf, sizeof( recbuf ), &dwReading, NULL ) ) {
+                DWORD i;
+                for ( i = 0; i < dwReading; i++ )
+                    s += recbuf [i];
+                //--HDT,x.x,T*hh<CR><LF>
+          
+              while ( ( pos = s.find( delimiter ) ) != std::string::npos ) {
+                  y++;
+                  token [y] = s.substr( 0, pos );
+                  s.erase( 0, pos + delimiter.length() );
+                  if ( token [1] != "$RAHDT" ) break; //$RAHDT  $HCHDM
+                  if ( y == 2 ) delimiter = "*"; // Last token has no ','
+              }
+              if ( token[2] != "" && token [3] == "T" ) { //True heading
+                RAHeadIsValid = true;
+                d_Course = stod( token [2] );
+                FormatCourseData();
+                NMEA_HDM(); //Update NMEA message after course change
+                LastHDTMes = clock(); //Serial watchdog
+                if ( !RadarHeading ) {
+                    cout << "Now start using course from radar heading.\n";
+                    RadarHeading = true;
+                }
+              } else StopNMEACourse(); //Stop reading heading from serial read
+
+          } else cout << "No succes reading COM port\n" << dwReading << "\n";
+
+
+      } else StopNMEACourse(); //If reading heading from serial and time out, stop it      
+  }
+
+  void StopNMEACourse( void ) {
+      if ( RadarHeading && ( ( clock() - LastHDTMes ) / CLOCKS_PER_SEC ) > 20 ) {
+          RadarHeading = false; //Switch it off again and
+          RAHeadIsValid = false;
+          cout << "Radar heading from serial connection is broken.\n";
+          FormatCourseData();
+          NMEA_HDM(); //Update NMEA message after course change
+      }
+  }
+  
+  int getNbrOfBytes( void ) {
+      struct _COMSTAT status;
+      int             n;
+      unsigned long   etat;
+      n = 0;
+
+      if ( hSerial != INVALID_HANDLE_VALUE ) {
+          ClearCommError( hSerial, &etat, &status );
+          n = status.cbInQue;
+      }
+      return( n );
+  }
