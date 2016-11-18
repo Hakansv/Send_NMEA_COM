@@ -198,6 +198,7 @@ int main()
     }
  
     GetNavData();        //Ask if Navdata from file shall be changed.
+    PosTimer = clock();  // Now start crousing, set first position timer.
     FormatCourseData();
         
     fprintf_s(stderr, "\nSending bytes........................\n\n");
@@ -852,7 +853,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
                 NMEA_HDM(); //Update NMEA message after course change
                 LastHDTMes = clock(); //Serial watchdog
                 if ( !RadarHeading ) {
-                    cout << "Now start using course from radar heading.\n";
+                    cout << "RAHDT received! Now the course is obtained from radar heading.\n";
                     RadarHeading = true;
                 }
               } else StopNMEACourse(); //Stop reading heading from serial read
