@@ -229,7 +229,7 @@ int main()
             PrintUserInfo();
             InfoCount = 0;
         }
-        if ( !firstRunOK && InfoCount > 2 ) {
+        if ( !firstRunOK && InfoCount > 1 ) {
             cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
             firstRunOK = true;
             hideNMEA = !hideNMEA;
@@ -697,7 +697,6 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
           << "     Hit + or - to instantly change course 10 degr up or down\n"
           << "     Hit P to show or hide NMEA messaging to screen\n"
-          << "     Hit R to read or stop reading the course from serial NMEA RAHDT message\n"
           << "     Hit any other key to change the initial course to a new value.\n\n";
   }
 
@@ -714,22 +713,6 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
               d_Course = d_CourseTemp;
               WriteNavdata();
           }
-          break;
-      case 'R':
-      case 'r':
-          if ( RAHeadIsValid && !RadarHeading) {
-              RadarHeading = true; //Read course from serial NMEA
-              pIsTouched = true;
-              cout << "Now reading course from radar NMEA\n";
-              break;
-          } else if ( RadarHeading ) {
-              RadarHeading = false;
-              pIsTouched = true;
-              cout << "Stop reading new course from serial NMEA\n";
-              break;
-              }
-          cout << "No radar heading available.\n";
-          pIsTouched = true;
           break;
       case '+':
           if ( RadarHeading ) break;// No course change while heading from radar
