@@ -229,8 +229,8 @@ int main()
             PrintUserInfo();
             InfoCount = 0;
         }
-        if ( !firstRunOK && InfoCount > 1 ) {
-            cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them again.\n\n";
+        if ( !firstRunOK && InfoCount >= 1 ) {
+            cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them all.\n\n";
             firstRunOK = true;
             hideNMEA = !hideNMEA;
             PrintUserInfo();
@@ -697,6 +697,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
           << "     Hit + or - to instantly change course 10 degr up or down\n"
           << "     Hit P to show or hide NMEA messaging to screen\n"
+          << "     Hit R to restart navigation from intial/saved position\n"
           << "     Hit any other key to change the initial course to a new value.\n\n";
   }
 
@@ -733,6 +734,12 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           }
           else cout << "  Printing NMEA to screen\n";
           hideNMEA = !hideNMEA;
+          break;
+      case 'r':
+      case 'R':
+          pIsTouched = true;
+          ReadNavData();
+          cout << " Navigation restarted\n";
           break;
       case '?':
           d_TWA_init += 10;
