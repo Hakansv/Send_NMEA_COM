@@ -205,7 +205,7 @@ int main()
     //PrintUserInfo();
     NMEA_HDM(); //Make the HDM sentance.
     
-    while (!esc) { //Quit on Esc or space
+    while (!esc) { //Quit on Esc or space *************************************THE BIG WHILE****************:)
         
         if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next MWV mes.
             CalcWind();
