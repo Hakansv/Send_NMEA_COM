@@ -26,8 +26,7 @@ Any change you make to the initial navdata will be stored in a local file for ne
 Using above values the initial position will be updated to follow given course at given speed. 
 Thus you'll get a moving boat in for example OpenCPN and also test some Dashboard instruments.  
 The course can be changed while the program is running.
-
-![console_clip](https://cloud.githubusercontent.com/assets/7202854/20133092/5b613726-a666-11e6-94f3-dbe0f7412c2a.PNG)
+![skarmklipp](https://cloud.githubusercontent.com/assets/7202854/20579920/b501c24a-b1cf-11e6-84b7-b3ff134edf80.PNG)
 
 Thanks to:  
 // Send_NMEA_COM.cpp : Defines the entry point for the console application.  
