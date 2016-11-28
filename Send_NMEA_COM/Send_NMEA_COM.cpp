@@ -833,9 +833,18 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
                   y++;
                   token [y] = s.substr( 0, pos );
                   s.erase( 0, pos + delimiter.length() );
-                  if ( token [1] != "$RAHDT" ) break; //$RAHDT  $HCHDM
-                  if ( y == 2 ) delimiter = "*"; // Last token has no ','
+                  if (token [1] == "$RAHDT" || token [1] == "RAHDT") {
+                      if (y == 2) delimiter = "*"; // Last token has no ',' break; //$RAHDT  $HCHDM
+                  } else {
+                      if (delimiter == "$") {
+                          delimiter = ",";
+                      } else {
+                          delimiter = "$";
+                      }
+                      y = 0;
+                  }
               }
+
               if ( token[2] != "" && token [3] == "T" ) { //True heading
                 RAHeadIsValid = true;
                 d_Course = stod( token [2] );
