@@ -1,5 +1,5 @@
 # Send_NMEA_COM
-Send NMEA sentences to a serial COM port for testing. Primarily for OpenCPN and BR24Radar_pi.
+Sending NMEA sentences to a serial COM port for testing. Primarily for OpenCPN and BR24Radar_pi.
 It's a small console program to send NMEA messages to a serial COM port.
 Only tested in Windows and built in VS2013.  
 Build it by yourself or download the Windows exe file from the Release tab. https://github.com/Hakansv/Send_NMEA_COM/releases
@@ -15,9 +15,9 @@ $VDMWV,44.4,T,9.1,N,A*15
 $VDVHW,,T,279.100,M,5.800,N,,K*47  
 $VDMWV,55.3,R,8.5,N,A*11  
 
-Either of the following messages are received from the serial port to set the simulated course:
-$RAHDT Radar Heading
-$ECAPB Autopilot message (Course to steer) 
+Either of the following messages are received from the serial port to set the simulated course:  
+$RAHDT Radar Heading  
+$ECAPB Autopilot message (Course to steer)  
 
 You have an option to change some of the navdata variables on init:  
 Present Navdata:  
