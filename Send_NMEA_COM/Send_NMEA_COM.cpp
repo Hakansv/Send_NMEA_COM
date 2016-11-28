@@ -7,13 +7,14 @@
 // Added routine to find a COM port and more NMEA strings by Håkan 2016-06-09
 // Functions for user input of Nav-Data. Håkan 2016-11-08
 // More UI functions. Håkan 2016-11-10
+// Read course from serial input RAHDT or ECAPB 2016-11-28
  
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
 using namespace std;
 
-//Initial Nav-data variables
+//Initial Nav-data variables when no config file is present
 string s_Cog = "272.1";  //Degres value for Cog
 string s_Mag = "272.1"; //Heading for NMEA
 double d_Course = 282.1;  //Course to steer
@@ -21,9 +22,9 @@ double d_SOG = 6.5;    //Speed to run
 double Def_Lat = 5803.200, Def_Long = 01122.100; //NMEA-Format!! Initial position for the cruise, N/E :)
 string N_S = "N", E_W = "E";
 double wmm = 3.0; //Variation to calc HDM from Course
-double SecToNextPos = 2.5; //Time, e.g. distance to wait before next posistion change.
 
 //Others
+double SecToNextPos = 2.5; //Time, e.g. distance to wait before next posistion change.
 double d_AWS_kn = 5; //App wind speed
 double d_AWA = 270; // App wind angle
 double d_TWS_kn = 8.5; //True Wind speed
@@ -33,7 +34,6 @@ double d_DBT = 5.5; //Depth
 double angleRadHeading = 1; //Heading in radians
 double d_CourseTemp = 0;  //Temp course to save
 double M_PI = 3.141592654;
-int PauseTime = 150;  //Pause between each transmitt
 int InfoCount = 0;
 int testsum(string);
 char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT[50];
@@ -46,9 +46,13 @@ bool TorR = false;
 bool hideNMEA = false;
 bool firstRunOK = false;
 bool RadarHeading = false, RAHeadIsValid = false;
-clock_t PosTimer = clock();
-clock_t LastWindMes = clock();
-clock_t LastHDTMes = clock();
+clock_t PosTimer = 1; // clock();
+clock_t PauseTimer1 = 1; // clock();
+clock_t PauseTimer2 = 1; // clock();
+clock_t PauseTimer3 = 1; // clock();
+clock_t PauseTimer4 = 1; // clock();
+clock_t LastWindMes = 1; // clock();
+clock_t LastHDTMes = 1; // clock();
 //TODO check if found:
 string userdata = getenv("USERPROFILE");
 HANDLE hSerial; //COM port handler
@@ -198,16 +202,23 @@ int main()
     }
  
     GetNavData();        //Ask if Navdata from file shall be changed.
-    PosTimer = clock();  // Now start crousing, set first position timer.
     FormatCourseData();
         
     fprintf_s(stderr, "\nSending bytes........................\n\n");
-    //PrintUserInfo();
     NMEA_HDM(); //Make the HDM sentance.
+    //Initiating all timers 
+    PosTimer = clock();
+    PauseTimer1 = clock();
+    PauseTimer2 = clock() + 100;
+    PauseTimer3 = clock() + 200;
+    PauseTimer4 = clock() + 300;
+    LastWindMes = clock() + 400;
+    LastHDTMes = clock() + 500;
+
     
-    while (!esc) { //Quit on Esc or space *************************************THE BIG WHILE****************:)
+    while (!esc) { //Quit on Esc or space *************************************THE BIG WHILE :-)***************:)
         
-        if ( ( ( clock() - LastWindMes ) ) > 1000 ) {// Wait a sec before next MWV mes.
+        if ( ( ( clock() - LastWindMes ) ) > 2000 ) {// Wait 2 sec before next MWV mes.
             CalcWind();
             MakeNMEA_MWV( TorR ); //Make the MWV and alter between R and T.
             TorR = !TorR;
@@ -221,73 +232,80 @@ int main()
             }
             if ( !hideNMEA ) fprintf_s( stderr, MWV_NMEA ); //\n finns i strängen
         }
-
         if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos )
             CalculateNewPos( d_Lat, d_long ); // Wait for enough distance to calc a new pos.
         
-        if (InfoCount > 30) { 
-            PrintUserInfo();
-            InfoCount = 0;
-        }
-        if ( !firstRunOK && InfoCount >= 1 ) {
-            cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them all.\n\n";
-            firstRunOK = true;
-            hideNMEA = !hideNMEA;
-            PrintUserInfo();
-        }
-        if ( !hideNMEA ) InfoCount++;
+        if (( ( clock() - PauseTimer1 ) ) > 700) {
+                if (InfoCount > 20) { 
+                PrintUserInfo();
+                InfoCount = 0;
+            }
+            if ( !firstRunOK && InfoCount >= 1 ) {
+                cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them all.\n\n";
+                firstRunOK = true;
+                hideNMEA = !hideNMEA;
+                PrintUserInfo();
+            }
+            if ( !hideNMEA ) InfoCount++;
             
-        if ( Last ) {
-                MakeNMEA(); //Make the RMC sentance.
-        }
-        else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
+            if ( Last ) {
+                    MakeNMEA(); //Make the RMC sentance.
+            }
+            else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
         
-        Last = !Last; //Alter between the two every turn
-        Sleep( PauseTime ); //Let COM port buffer be empty
-        if ( !WriteFile( hSerial, NMEA, strlen( NMEA ), &bytes_written, NULL ) )
-        {
-            cout << bytes_written << " Bytes written \n";
-            fprintf_s(stderr, "Error print NMEA\n");
-            CloseHandle(hSerial);
-            int Dummy = toupper(_getch());
-            return 1;
-        }  
-         //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
-        if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
-        
-        if (Last) continue; //Send the rest NMEA mess every second turn only.    
-        Sleep (PauseTime);
-	     if(!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL))
-        {
-            fprintf_s(stderr, "Error. Hit a key to exit\n");
-            CloseHandle(hSerial);
-            int Dummy = toupper(_getch());
-            return 1;
-        }
-         if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
+            Last = !Last; //Alter between the two every turn
+            if ( !WriteFile( hSerial, NMEA, strlen( NMEA ), &bytes_written, NULL ) )
+            {
+                cout << bytes_written << " Bytes written \n";
+                fprintf_s(stderr, "Error print NMEA\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+            }
 
-         //Send MTW > Water temperature
-         Sleep(PauseTime);
-         if (!WriteFile(hSerial, NMEA_MTW, strlen(NMEA_MTW), &bytes_written, NULL))
-         {
-             fprintf_s(stderr, "Error. Hit a key to exit\n");
-             CloseHandle(hSerial);
-             int Dummy = toupper(_getch());
-             return 1;
-         }
-         if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
+             //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
+            if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
+            PauseTimer1 = clock();
+        }
+
+        if (( ( clock() - PauseTimer2 ) ) > 1000) {
+             if(!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL))
+            {
+                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+            }
+             if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
+             PauseTimer2 = clock();
+        }
+
+        if (( ( clock() - PauseTimer3 ) ) > 10000) {
+             //Send MTW > Water temperature
+             if (!WriteFile(hSerial, NMEA_MTW, strlen(NMEA_MTW), &bytes_written, NULL))
+             {
+                 fprintf_s(stderr, "Error. Hit a key to exit\n");
+                 CloseHandle(hSerial);
+                 int Dummy = toupper(_getch());
+                 return 1;
+             }
+             if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
+             PauseTimer3 = clock();
+        }
          
-         //Send NMEA_DBT > Depth
-         Sleep(PauseTime);
-         MakeNMEA_DBT();
-         if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL))
-         {
-             fprintf_s(stderr, "Error. Hit a key to exit\n");
-             CloseHandle(hSerial);
-             int Dummy = toupper(_getch());
-             return 1;
-         }
-         if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
+        if (( ( clock() - PauseTimer4 ) ) > 1500) {
+             //Send NMEA_DBT > Depth
+             MakeNMEA_DBT();
+             if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL))
+             {
+                 fprintf_s(stderr, "Error. Hit a key to exit\n");
+                 CloseHandle(hSerial);
+                 int Dummy = toupper(_getch());
+                 return 1;
+             }
+             if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
+             PauseTimer4 = clock();
+        }
 
          ReadSerial(); //Read serial port for NMEA messages
          
@@ -318,7 +336,7 @@ void MakeNMEA() {
   string s_Long = static_cast<ostringstream*>(&(ostringstream() << setprecision(4) << fixed << d_long))->str();
   string s_d_SOG = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_SOG))->str();
   string nmea = "$GPRMC,";
-  nmea += "123519,";    //Time
+  nmea += ",";    //Time  123519
   nmea += "A,";         //Valid
   nmea += s_Lat;        //Lat
   nmea += ",";
@@ -695,9 +713,11 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
 
   void PrintUserInfo(void) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
-          << "     Hit + or - to instantly change course 10 degr up or down\n"
           << "     Hit P to show or hide NMEA messaging to screen\n"
-          << "     Hit R to restart navigation from intial/saved position\n"
+          << "     Hit R to restart navigation from initial/saved position\n"
+          << "     Hit ? or _ to instantly change wind direction 10 degr up or down\n"
+          << "     Unless course is obtained from serial input you can:\n"
+          << "     Hit + or - to instantly change course 10 degr up or down\n"
           << "     Hit any other key to change the initial course to a new value.\n\n";
   }
 
@@ -729,7 +749,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       case 'P':
           pIsTouched = true;
           if (!hideNMEA) {
-              cout << "\n  NMEA printing to screen is disabled. Hit P to view\n";
+              cout << "\n  NMEA printing to screen is disabled.\n";
               PrintUserInfo();
           }
           else cout << "  Printing NMEA to screen\n";
@@ -817,7 +837,9 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       size_t pos = 0;
       string s;
       string delimiter = ",";
-      string token [8];
+      string token [16];
+      string sentense, courseunit, XTE_Dir;
+      double d_newcourse = NULL, d_XTE = 0.0;
       char recbuf [50];
       int bytestoread = 0, y = 0;
       
@@ -830,29 +852,73 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
                 //--HDT,x.x,T*hh<CR><LF>
           
               while ( ( pos = s.find( delimiter ) ) != std::string::npos ) {
-                  y++;
                   token [y] = s.substr( 0, pos );
                   s.erase( 0, pos + delimiter.length() );
-                  if (token [1] == "$RAHDT" || token [1] == "RAHDT") {
-                      if (y == 2) delimiter = "*"; // Last token has no ',' break; //$RAHDT  $HCHDM
+                  if (token [0] == "$RAHDT" || token [0] == "RAHDT") {
+                      switch (y) {
+                      case 0:
+                          sentense = token [0];
+                          delimiter = ",";
+                          break;
+                      case 1:
+                          d_newcourse = stod(token [1]);
+                          delimiter = "*"; // Last token has no ','  //$RAHDT  $HCHDM
+                          break;
+                      case 2:
+                          courseunit = token [2];
+                          delimiter = "$";  //Find next sentance
+                          continue;
+                          break;
+                      }
+                    
+                  } else if (token [0] == "$ECAPB" || token [0] == "ECAPB") {
+                      switch (y) {
+                      case 0:
+                          sentense = token [0];
+                          delimiter = ",";
+                          break;
+                      case 3:  //Cross Track Error Magnitude
+                          d_XTE = stod(token [y]);
+                          break;
+                      case 4:  //Direction to steer, L or R
+                          XTE_Dir = token [y];
+                          break;
+                      case 11: //Bearing, present position to Destination
+                          d_newcourse = stod(token [y]);
+                          break;
+                      case 12:  //M = Magnetic, T = True
+                          courseunit = token [y];
+                          delimiter = "$";  //Find next sentance
+                          continue;
+                          break;
+                      default:
+                          break;
+                      } 
+                  
                   } else {
                       if (delimiter == "$") {
                           delimiter = ",";
                       } else {
-                          delimiter = "$";
+                          delimiter = "$";  //Find next sentance
                       }
                       y = 0;
                   }
+                  y++;
               }
 
-              if ( token[2] != "" && token [3] == "T" ) { //True heading
+              if (d_newcourse && "T" == courseunit) { //True heading
+                  // Increased XTE action for the simulation, XTE is normally like 0.015
+                  double dXTE_factor = d_XTE > 0.1 ? ( d_XTE > 0.5 ? 10 : 100 ) : 1000; // Like Excel hmmmm!?
+                  d_newcourse = ("L" == XTE_Dir ? d_newcourse - dXTE_factor * d_XTE : d_newcourse + dXTE_factor * d_XTE);
+                      if (d_newcourse < 0) d_newcourse += 360;
+                      if (d_newcourse > 360) d_newcourse -= 360;
                 RAHeadIsValid = true;
-                d_Course = stod( token [2] );
+                d_Course = d_newcourse; // stod( token [1] );
                 FormatCourseData();
                 NMEA_HDM(); //Update NMEA message after course change
                 LastHDTMes = clock(); //Serial watchdog
                 if ( !RadarHeading ) {
-                    cout << "RAHDT received! Now the course is obtained from radar heading.\n";
+                    cout << sentense << " received! Now the course is obtained from serial input.\n";
                     RadarHeading = true;
                 }
               } else StopNMEACourse(); //Stop reading heading from serial read
@@ -860,14 +926,14 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           } else cout << "No succes reading COM port\n" << dwReading << "\n";
 
 
-      } else StopNMEACourse(); //If reading heading from serial and time out, stop it      
+      } else StopNMEACourse(); //If reading heading from serial and time out, stop it 
   }
 
   void StopNMEACourse( void ) {
-      if ( RadarHeading && ( ( clock() - LastHDTMes ) / CLOCKS_PER_SEC ) > 20 ) {
+      if ( RadarHeading && ( ( clock() - LastHDTMes ) / CLOCKS_PER_SEC ) > 15 ) {
           RadarHeading = false; //Switch it off again and
           RAHeadIsValid = false;
-          cout << "Radar heading from serial connection is broken.\n";
+          cout << "Heading from serial connection is broken.\n";
           FormatCourseData();
           NMEA_HDM(); //Update NMEA message after course change
       }
