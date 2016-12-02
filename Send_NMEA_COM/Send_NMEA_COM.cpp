@@ -723,11 +723,11 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
 
   void OnKeyPress(void) {
       char key = _getch();
-      cout << key << "\n";
+      //cout << key << "\n";
       bool pIsTouched = false;
       switch (key) {
-      case 27:
-      case 32:
+      case 27: //Esc
+      case 32: //Space
           esc = true;
           if ( d_CourseTemp > 0 ) {
               ReadNavData();
@@ -765,13 +765,13 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           d_TWA_init += 10;
           if ( d_TWA_init > 360 ) d_TWA_init = d_TWA_init - 360;
           pIsTouched = true; //Like
-          cout << "True Wind changed\n";
+          cout << "True Wind angle increased\n";
           break;
       case '_':
           d_TWA_init -= 10;
           if ( d_TWA_init < 0 ) d_TWA_init = 360 + d_TWA_init;
           pIsTouched = true; // Like
-          cout << "True Wind changed\n";
+          cout << "True Wind angle decreased\n";
           break;
       default:
          if ( RadarHeading ) break; // No course change while heading from radar
