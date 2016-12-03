@@ -32,11 +32,13 @@ double d_TWA = 270; //True wind angle
 double d_TWA_init = 310; //True wind angle
 double d_DBT = 5.5; //Depth
 double angleRadHeading = 1; //Heading in radians
-double d_CourseTemp = 0;  //Temp course to save
+double d_CourseTemp = 0;  //Temp. course to save
+double d_BaroPress = 1.013; //Barometer pressure
+double d_Heel = 2.0, d_Pitch = 1; //Heel & Pitch angle
 double M_PI = 3.141592654;
 int InfoCount = 0;
 int testsum(string);
-char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT[50];
+char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT [50], NMEA_MDA [70], NMEA_XDR[80];
 double d_long = Def_Long, d_Lat = Def_Lat;
 bool esc = false;
 double STW = 6.20;      //STW for VHW
@@ -51,6 +53,7 @@ clock_t PauseTimer1 = 1; // clock();
 clock_t PauseTimer2 = 1; // clock();
 clock_t PauseTimer3 = 1; // clock();
 clock_t PauseTimer4 = 1; // clock();
+clock_t PauseTimer5 = 1; // clock();
 clock_t LastWindMes = 1; // clock();
 clock_t LastHDTMes = 1; // clock();
 //TODO check if found:
@@ -71,6 +74,8 @@ void MakeNMEA_VHW();
 void NMEA_HDM(void);
 void MakeNMEA_MWV(bool);
 void MakeNMEA_DBT( void );
+void MakeNMEA_MDA(void);
+void MakeNMEA_XDR(void);
 double GetUserInput(double, int, int);
 void ReadNavData(void);
 void WriteNavdata(void);
@@ -212,6 +217,7 @@ int main()
     PauseTimer2 = clock() + 100;
     PauseTimer3 = clock() + 200;
     PauseTimer4 = clock() + 300;
+    PauseTimer5 = clock() + 600;
     LastWindMes = clock() + 400;
     LastHDTMes = clock() + 500;
 
@@ -243,7 +249,7 @@ int main()
             if ( !firstRunOK && InfoCount >= 1 ) {
                 cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them all.\n\n";
                 firstRunOK = true;
-                hideNMEA = !hideNMEA;
+                hideNMEA = true;
                 PrintUserInfo();
             }
             if ( !hideNMEA ) InfoCount++;
@@ -305,6 +311,31 @@ int main()
              }
              if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
              PauseTimer4 = clock();
+        }
+
+        if (( ( clock() - PauseTimer5 ) ) > 5000) {
+            //Send NMEA_MDA / XDR > Baro-press
+            bool MDA = false;
+            if (MDA) {
+                MakeNMEA_MDA(); //0
+                if (!WriteFile(hSerial, NMEA_MDA, strlen(NMEA_MDA), &bytes_written, NULL)) {
+                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+            }
+            if (!hideNMEA) fprintf_s(stderr, NMEA_MDA); //\n finns i strängen
+            } else {
+                MakeNMEA_XDR(); //1
+                if (!WriteFile(hSerial, NMEA_XDR, strlen(NMEA_XDR), &bytes_written, NULL)) {
+                    fprintf_s(stderr, "Error. Hit a key to exit\n");
+                    CloseHandle(hSerial);
+                    int Dummy = toupper(_getch());
+                    return 1;
+                }
+                if (!hideNMEA) fprintf_s(stderr, NMEA_XDR); //\n finns i strängen
+            }
+            PauseTimer5 = clock();
         }
 
          ReadSerial(); //Read serial port for NMEA messages
@@ -479,6 +510,130 @@ void MakeNMEA_VHW() {
             MWV_NMEA[a] = nmea[a];
         }
 }
+
+    /*
+    ** XDR - Transducer Measurement
+    **
+    **        1 2   3 4            n
+    **        | |   | |            |
+    ** $--XDR,a,x.x,a,c--c, ..... *hh<CR><LF>
+    **
+    ** Field Number:
+    **  1) Transducer Type
+    **  2) Measurement Data
+    **  3) Unit of Measurement, Celcius
+    **  4) Name of transducer
+    **  ...
+    **  n) Checksum
+    ** There may be any number of quadruplets like this, each describing a sensor. The last field will be a checksum as usual.
+    */
+
+    void MakeNMEA_XDR(void) {
+        d_BaroPress > 1.024 ? d_BaroPress = 0.985 : d_BaroPress += 0.0005;
+        string s_BaroPress = static_cast<ostringstream*>( &( ostringstream() << setprecision(3) << fixed << d_BaroPress ) )->str();
+        d_Heel > 23.1 ? d_Heel = -21.2 : d_Heel += 0.5;
+        string s_Heel = static_cast<ostringstream*>( &( ostringstream() << setprecision(3) << fixed << d_Heel ) )->str();
+        d_Pitch > 13.1 ? d_Pitch = -11.2 : d_Pitch += 1.2;
+        string s_Pitch = static_cast<ostringstream*>( &( ostringstream() << setprecision(3) << fixed << d_Pitch ) )->str();
+        string nmea = "$IIXDR,";
+        nmea += "P"; // 1. Type P = Pressure
+        nmea += ',';
+        nmea += s_BaroPress; // 2.Barometric pressure, bars
+        nmea += ',';
+        nmea += "B"; // 3. Barometric Unit, B = bars
+        nmea += ',';
+        nmea += "BAROMETER"; // 4.  
+        nmea += ',';
+        nmea += "A"; // 1. Type Heel or Pitch
+        nmea += ',';
+        nmea += s_Heel; // 2.Heel angle degr + = starboard
+        nmea += ',';
+        nmea += ""; // 3. 
+        nmea += ',';
+        nmea += "ROLL"; // 4.  
+        nmea += ',';
+        nmea += "A"; // 1. Type Heel or Pitch
+        nmea += ',';
+        nmea += s_Pitch; // 2.Pitch angle degr + = starboard
+        nmea += ',';
+        nmea += ""; // 3. 
+        nmea += ',';
+        nmea += "PTCH"; // 4.  Pitch
+        nmea += ',';
+        nmea += '*';
+        nmea += static_cast<ostringstream*>( &( ostringstream() << hex << testsum(nmea) ) )->str();
+        nmea += '\r';
+        nmea += '\n';
+        int Lens = nmea.size();
+        memset(NMEA_XDR, NULL, sizeof(NMEA_XDR)); //Clear the array
+        for (int a = 0; a < Lens; a++) {
+            NMEA_XDR [a] = nmea [a];
+        }
+    }
+
+    /*
+            1 2  3  4  5  6  7  8  9  10  11  2 13  4 15  6 17  8 19 20
+    **MDA,x.x,I,x.x,B,x.x,C,x.x,C,x.x,x.x,x.x,C,x.x,T,x.x,M,x.x,N,x.x,M*hh<CR><LF>
+    **    |   |  |  |          Dew point, degrees C
+    **    |   |  |  |          Absolute humidity, percent
+    **    |   |  |  |          Relative humidity, percent
+    **    |   |  |  |        Water temperature, degrees C
+    **    |   |  |  |          Air temperature, degrees C
+    **    |   |  |----Barometric pressure, bars
+    **    |----- Barometric pressure, inches of mercur
+    */
+     void MakeNMEA_MDA(void) {
+        string nmea = "$IIMDA,";
+        nmea += ""; // 1. 
+        nmea += ',';
+        nmea += ""; // 2.
+        nmea += ',';
+        nmea += "1.015"; // 3. Barometric pressure, bars
+        nmea += ',';
+        nmea += "B"; // 4.  Barometric Unit, B = bars
+        nmea += ',';
+        nmea += ""; // 5. 
+        nmea += ',';
+        nmea += ""; // 6. 
+        nmea += ',';
+        nmea += ""; // 7. 
+        nmea += ',';
+        nmea += ""; // 8. 
+        nmea += ',';
+        nmea += ""; // 9. 
+        nmea += ',';
+        nmea += ""; // 10. 
+        nmea += ',';
+        nmea += ""; // 11. 
+        nmea += ',';
+        nmea += ""; // 12. 
+        nmea += ',';
+        nmea += ""; // 13. 
+        nmea += ',';
+        nmea += ""; // 14. 
+        nmea += ',';
+        nmea += ""; // 15. 
+        nmea += ',';
+        nmea += ""; // 16. 
+        nmea += ',';
+        nmea += ""; // 17. 
+        nmea += ',';
+        nmea += ""; // 18. 
+        nmea += ',';
+        nmea += ""; // 19. 
+        nmea += ',';
+        nmea += ""; // 20. 
+        nmea += '*';
+        nmea += static_cast<ostringstream*>(&(ostringstream() << hex << testsum(nmea)))->str();
+        nmea += '\r';
+        nmea += '\n';
+        int Lens = nmea.size();
+        memset( NMEA_MDA, NULL, sizeof( NMEA_MDA ) ); //Clear the array
+        for (int a = 0; a < Lens; a++) {
+            NMEA_MDA[a] = nmea [a];
+        }
+} 
+    
 
     //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
      void MakeNMEA_DBT(void) {
@@ -715,6 +870,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       cout << "\n     Hit Esc or Space to exit the program.\n"
           << "     Hit P to show or hide NMEA messaging to screen\n"
           << "     Hit R to restart navigation from initial/saved position\n"
+          << "     Hit S to save all actual navdata to the config file\n"
           << "     Hit ? or _ to instantly change wind direction 10 degr up or down\n"
           << "     Unless course is obtained from serial input you can:\n"
           << "     Hit + or - to instantly change course 10 degr up or down\n"
@@ -751,8 +907,9 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           if (!hideNMEA) {
               cout << "\n  NMEA printing to screen is disabled.\n";
               PrintUserInfo();
+          } else {
+              cout << "  Printing NMEA to screen\n";
           }
-          else cout << "  Printing NMEA to screen\n";
           hideNMEA = !hideNMEA;
           break;
       case 'r':
@@ -760,6 +917,12 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           pIsTouched = true;
           ReadNavData();
           cout << " Navigation restarted\n";
+          break;
+      case 's':
+      case 'S':
+          pIsTouched = true;
+          WriteNavdata();
+          cout << " All present navdata are saved to config file\n";
           break;
       case '?':
           d_TWA_init += 10;
