@@ -46,7 +46,6 @@ double STW_Upd = 0.003; //STW incr. each cycle
 bool Quit = false;
 bool TorR = false;
 bool hideNMEA = false;
-bool firstRunOK = false;
 bool RadarHeading = false, RAHeadIsValid = false;
 clock_t PosTimer = 1; // clock();
 clock_t PauseTimer1 = 1; // clock();
@@ -223,45 +222,44 @@ int main()
 
     
     while (!esc) { //Quit on Esc or space *************************************THE BIG WHILE :-)***************:)
-        
-        if ( ( ( clock() - LastWindMes ) ) > 2000 ) {// Wait 2 sec before next MWV mes.
+
+        if (( ( clock() - LastWindMes ) ) > 2000) {// Wait 2 sec before next MWV mes.
             CalcWind();
-            MakeNMEA_MWV( TorR ); //Make the MWV and alter between R and T.
+            MakeNMEA_MWV(TorR); //Make the MWV and alter between R and T.
             TorR = !TorR;
             LastWindMes = clock();
             //Send MWV > Wind speeed and realtive angle
-            if ( !WriteFile( hSerial, MWV_NMEA, strlen( MWV_NMEA ), &bytes_written, NULL ) ) {
-                fprintf_s( stderr, "Error. Hit a key to exit\n" );
-                CloseHandle( hSerial );
-                int Dummy = toupper( _getch() );
+            if (!WriteFile(hSerial, MWV_NMEA, strlen(MWV_NMEA), &bytes_written, NULL)) {
+                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
                 return 1;
             }
-            if ( !hideNMEA ) fprintf_s( stderr, MWV_NMEA ); //\n finns i strängen
+            if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
         }
-        if ( ( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos )
-            CalculateNewPos( d_Lat, d_long ); // Wait for enough distance to calc a new pos.
-        
+        if (( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos)
+            CalculateNewPos(d_Lat, d_long); // Wait for enough distance to calc a new pos.
+
         if (( ( clock() - PauseTimer1 ) ) > 700) {
-                if (InfoCount > 20) { 
+            if (InfoCount > 20) {
                 PrintUserInfo();
                 InfoCount = 0;
             }
-            if ( !firstRunOK && InfoCount >= 1 ) {
+            static bool firstRunOK = false;
+            if (!firstRunOK && InfoCount >= 1) {
                 cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them all.\n\n";
                 firstRunOK = true;
                 hideNMEA = true;
                 PrintUserInfo();
             }
-            if ( !hideNMEA ) InfoCount++;
-            
-            if ( Last ) {
-                    MakeNMEA(); //Make the RMC sentance.
-            }
-            else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
-        
+            if (!hideNMEA) InfoCount++;
+
+            if (Last) {
+                MakeNMEA(); //Make the RMC sentance.
+            } else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
+
             Last = !Last; //Alter between the two every turn
-            if ( !WriteFile( hSerial, NMEA, strlen( NMEA ), &bytes_written, NULL ) )
-            {
+            if (!WriteFile(hSerial, NMEA, strlen(NMEA), &bytes_written, NULL)) {
                 cout << bytes_written << " Bytes written \n";
                 fprintf_s(stderr, "Error print NMEA\n");
                 CloseHandle(hSerial);
@@ -269,48 +267,45 @@ int main()
                 return 1;
             }
 
-             //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
-            if ( !hideNMEA ) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
+            //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
+            if (!hideNMEA) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
             PauseTimer1 = clock();
         }
 
         if (( ( clock() - PauseTimer2 ) ) > 1000) {
-             if(!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL))
-            {
+            if (!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL)) {
                 fprintf_s(stderr, "Error. Hit a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
             }
-             if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
-             PauseTimer2 = clock();
+            if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
+            PauseTimer2 = clock();
         }
 
         if (( ( clock() - PauseTimer3 ) ) > 10000) {
-             //Send MTW > Water temperature
-             if (!WriteFile(hSerial, NMEA_MTW, strlen(NMEA_MTW), &bytes_written, NULL))
-             {
-                 fprintf_s(stderr, "Error. Hit a key to exit\n");
-                 CloseHandle(hSerial);
-                 int Dummy = toupper(_getch());
-                 return 1;
-             }
-             if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
-             PauseTimer3 = clock();
+            //Send MTW > Water temperature
+            if (!WriteFile(hSerial, NMEA_MTW, strlen(NMEA_MTW), &bytes_written, NULL)) {
+                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+            }
+            if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
+            PauseTimer3 = clock();
         }
-         
+
         if (( ( clock() - PauseTimer4 ) ) > 1500) {
-             //Send NMEA_DBT > Depth
-             MakeNMEA_DBT();
-             if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL))
-             {
-                 fprintf_s(stderr, "Error. Hit a key to exit\n");
-                 CloseHandle(hSerial);
-                 int Dummy = toupper(_getch());
-                 return 1;
-             }
-             if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
-             PauseTimer4 = clock();
+            //Send NMEA_DBT > Depth
+            MakeNMEA_DBT();
+            if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL)) {
+                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+            }
+            if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
+            PauseTimer4 = clock();
         }
 
         if (( ( clock() - PauseTimer5 ) ) > 5000) {
@@ -319,12 +314,12 @@ int main()
             if (MDA) {
                 MakeNMEA_MDA(); //0
                 if (!WriteFile(hSerial, NMEA_MDA, strlen(NMEA_MDA), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Hit a key to exit\n");
-                CloseHandle(hSerial);
-                int Dummy = toupper(_getch());
-                return 1;
-            }
-            if (!hideNMEA) fprintf_s(stderr, NMEA_MDA); //\n finns i strängen
+                    fprintf_s(stderr, "Error. Hit a key to exit\n");
+                    CloseHandle(hSerial);
+                    int Dummy = toupper(_getch());
+                    return 1;
+                }
+                if (!hideNMEA) fprintf_s(stderr, NMEA_MDA); //\n finns i strängen
             } else {
                 MakeNMEA_XDR(); //1
                 if (!WriteFile(hSerial, NMEA_XDR, strlen(NMEA_XDR), &bytes_written, NULL)) {
@@ -338,12 +333,12 @@ int main()
             PauseTimer5 = clock();
         }
 
-         ReadSerial(); //Read serial port for NMEA messages
-         
-         if ( _kbhit() ) { //Check the buffer for a key press to exit the program or enter a new course
-             OnKeyPress();
-         }
+        ReadSerial(); //Read serial port for NMEA messages
 
+        if (_kbhit()) { //Check the buffer for a key press to exit the program or enter a new course
+            OnKeyPress();
+        }
+        
 } //End of while()
 
     // Close serial port
@@ -1035,6 +1030,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
                       }
                     
                   } else if (token [0] == "$ECAPB" || token [0] == "ECAPB") {
+                      static string WP_ID;
                       switch (y) {
                       case 0:
                           sentense = token [0];
@@ -1045,6 +1041,15 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
                           break;
                       case 4:  //Direction to steer, L or R
                           XTE_Dir = token [y];
+                          break;
+                      case 6: //Status A = Arrival Circle Entered
+                          if ("A" == token[y]) cout << "Waypoint " << WP_ID << " arrived\n";
+                          break;
+                      //case 7:  // Status: A = Perpendicular passed at waypoint. Not used by OCPN
+                      //    if ("A" == token[y]) cout << " Waypoint passed\n";
+                      //    break;
+                      case 10:  // Dest WP ID. Truncated to 6 by OCPN
+                          if (WP_ID != token[y]) WP_ID = token[y];
                           break;
                       case 11: //Bearing, present position to Destination
                           d_newcourse = stod(token [y]);
