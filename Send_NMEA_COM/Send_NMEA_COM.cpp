@@ -1076,10 +1076,10 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
 
               if (d_newcourse && "T" == courseunit) { //True heading
                   // Increased XTE action for the simulation, XTE is normally like 0.015
-                  double dXTE_factor = d_XTE > 0.1 ? ( d_XTE > 0.5 ? 10 : 100 ) : 1000; // Like Excel hmmmm!?
+                  double dXTE_factor = d_XTE > 0.1 ? ( d_XTE > 0.5 ? 10 : 50 ) : 100; // Like Excel hmmmm!?
                   d_newcourse = ("L" == XTE_Dir ? d_newcourse - dXTE_factor * d_XTE : d_newcourse + dXTE_factor * d_XTE);
-                      if (d_newcourse < 0) d_newcourse += 360;
-                      if (d_newcourse > 360) d_newcourse -= 360;
+                      if (d_newcourse < 0.) d_newcourse += 360.;
+                      else if (d_newcourse > 360.) d_newcourse -= 360.;
                 RAHeadIsValid = true;
                 d_Course = d_newcourse; // stod( token [1] );
                 FormatCourseData();
