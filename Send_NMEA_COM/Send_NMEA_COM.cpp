@@ -61,12 +61,12 @@ HANDLE hSerial; //COM port handler
 DWORD bytes_written, total_bytes_written = 0;
 
 //Functions
-void CalculateNewPos(double, double);
+void CalculateNewPos( const double &Lat_in, const double &Long_in );
 void CalcWind ( void );
 void GetNavData(void);
-double deg2rad(double, int);
-double rad2deg(double, int);
-double NMEA_degToDecDegr(double, int);
+double deg2rad( const double &Degr, const int &LL );
+double rad2deg( const double &Rad_in, const int &LL );
+double NMEA_degToDecDegr( const double &NMEA_deg, const int &LL );
 double DegrPosToNMEAPos(double, int);
 void MakeNMEA(void);
 void MakeNMEA_VHW();
@@ -75,7 +75,7 @@ void MakeNMEA_MWV(bool);
 void MakeNMEA_DBT( void );
 void MakeNMEA_MDA(void);
 void MakeNMEA_XDR(void);
-double GetUserInput(double, int, int);
+double GetUserInput( const double &NavData, const int &min, const int &max );
 void ReadNavData(void);
 void WriteNavdata(void);
 void FormatCourseData(void);
@@ -134,7 +134,7 @@ int main()
         {
             CloseHandle(hComm);
             fprintf_s(stderr, "\nFound serial port COM%d and it's ready to use", j);
-            _cputs("\nHit key \"y\" to use that port. Any other key continuing search\n");
+            _cputs("\nPress key \"y\" to use that port. Any other key continuing search\n");
             if (toupper(_getch()) == 'Y') break;
             //else:
             continue;
@@ -144,7 +144,7 @@ int main()
     }
     
     if (Quit) {
-        _cputs("\nNo useable port found or selected - Hit any key to exit program");
+        _cputs("\nNo useable port found or selected - Press any key to exit program");
         int Dummy = toupper(_getch());
         return 0; //No port found - exit pgm normally
     }
@@ -161,7 +161,7 @@ int main()
 
     if (hSerial == INVALID_HANDLE_VALUE)
     {
-            fprintf_s(stderr, "Error. Hit a key to exit\n");
+            fprintf_s(stderr, "Error. Press a key to exit\n");
             int Dummy = toupper(_getch());
             return 1;
     }
@@ -173,7 +173,7 @@ int main()
     dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
     if (GetCommState(hSerial, &dcbSerialParams) == 0)
     {
-        fprintf_s(stderr, "Error getting device state. Hit a key to exit\n");
+        fprintf_s(stderr, "Error getting device state. Press a key to exit\n");
         CloseHandle(hSerial);
         int Dummy = toupper(_getch());
         return 1;
@@ -185,7 +185,7 @@ int main()
     dcbSerialParams.Parity = NOPARITY;
     if(SetCommState(hSerial, &dcbSerialParams) == 0)
     {
-        fprintf_s(stderr, "Error setting device parameters. Hit a key to exit\n");
+        fprintf_s(stderr, "Error setting device parameters. Press a key to exit\n");
         CloseHandle(hSerial);
         int Dummy = toupper(_getch());
         return 1;
@@ -199,7 +199,7 @@ int main()
     timeouts.WriteTotalTimeoutMultiplier = 10;
     if(SetCommTimeouts(hSerial, &timeouts) == 0)
     {
-        fprintf_s(stderr, "Error setting timeouts. Hit a key to exit\n");
+        fprintf_s(stderr, "Error setting timeouts. Press a key to exit\n");
         CloseHandle(hSerial);
         int Dummy = toupper(_getch());
         return 1;
@@ -230,7 +230,7 @@ int main()
             LastWindMes = clock();
             //Send MWV > Wind speeed and realtive angle
             if (!WriteFile(hSerial, MWV_NMEA, strlen(MWV_NMEA), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
@@ -247,7 +247,7 @@ int main()
             }
             static bool firstRunOK = false;
             if (!firstRunOK && InfoCount >= 1) {
-                cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nHit P to view them all.\n\n";
+                cout << "\nOK it seems to work. Disabling NMEA printing to screen. \nPress P to view them all.\n\n";
                 firstRunOK = true;
                 hideNMEA = true;
                 PrintUserInfo();
@@ -274,7 +274,7 @@ int main()
 
         if (( ( clock() - PauseTimer2 ) ) > 1000) {
             if (!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
@@ -286,7 +286,7 @@ int main()
         if (( ( clock() - PauseTimer3 ) ) > 10000) {
             //Send MTW > Water temperature
             if (!WriteFile(hSerial, NMEA_MTW, strlen(NMEA_MTW), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
@@ -299,7 +299,7 @@ int main()
             //Send NMEA_DBT > Depth
             MakeNMEA_DBT();
             if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Hit a key to exit\n");
+                fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
@@ -314,7 +314,7 @@ int main()
             if (MDA) {
                 MakeNMEA_MDA(); //0
                 if (!WriteFile(hSerial, NMEA_MDA, strlen(NMEA_MDA), &bytes_written, NULL)) {
-                    fprintf_s(stderr, "Error. Hit a key to exit\n");
+                    fprintf_s(stderr, "Error. Press a key to exit\n");
                     CloseHandle(hSerial);
                     int Dummy = toupper(_getch());
                     return 1;
@@ -323,7 +323,7 @@ int main()
             } else {
                 MakeNMEA_XDR(); //1
                 if (!WriteFile(hSerial, NMEA_XDR, strlen(NMEA_XDR), &bytes_written, NULL)) {
-                    fprintf_s(stderr, "Error. Hit a key to exit\n");
+                    fprintf_s(stderr, "Error. Press a key to exit\n");
                     CloseHandle(hSerial);
                     int Dummy = toupper(_getch());
                     return 1;
@@ -345,7 +345,7 @@ int main()
     fprintf_s(stderr, "Closing serial port...");
     if (CloseHandle(hSerial) == 0)
     {
-        fprintf_s(stderr, "Error. Hit a key to exit\n");
+        fprintf_s(stderr, "Error. Press a key to exit\n");
         int Dummy = toupper(_getch());
         return 1;
     }
@@ -682,7 +682,7 @@ void FormatCourseData(void) {
     angleRadHeading = d_Course * M_PI / 180.0; //for POS calculation
 }
 
-void CalculateNewPos(double Lat_in, double Long_in) {
+void CalculateNewPos(const double &Lat_in, const double &Long_in) {
     double secondsPassed = (clock() - PosTimer) / CLOCKS_PER_SEC;
     const double mRadiusEarth = 6378100.0f;
     double mSpeed = d_SOG * 0.514444f; //From knots to m/s
@@ -710,17 +710,17 @@ void CalculateNewPos(double Lat_in, double Long_in) {
     PosTimer = clock();
 }
 
-double deg2rad(double Degr, int LL) {
+double deg2rad(const double &Degr, const int &LL) {
     double r = NMEA_degToDecDegr(Degr, LL) * M_PI / 180.0;
     return r;
 }
-double rad2deg(double Rad_in, int LL){
-    Rad_in = Rad_in * 180.0 / M_PI;//To degr
-    double d = DegrPosToNMEAPos(Rad_in, LL);
+double rad2deg(const double &Rad_in, const int &LL){
+    double Rad = Rad_in * 180.0 / M_PI;//To degr
+    double d = DegrPosToNMEAPos(Rad, LL);
     return d;
 }
 
-double NMEA_degToDecDegr(double NMEA_deg, int LL) {
+double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
     //Lat/Long in NMEA format. Make it to decimal degrees.
     double degs = (int)(NMEA_deg / 100.0);
     double mins = NMEA_deg - degs * 100.0;
@@ -756,7 +756,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
           << " Variation: " << wmm << "\n"
           << " Speed knots: " << d_SOG;
 
-      _cputs("\n\nHit key \"y\" to accept above values. Any other key will let you change them, one by one.\n\n");
+      _cputs("\n\nPress key \"y\" to accept above values. Any other key will let you change them, one by one.\n\n");
       if (toupper(_getch()) == 'Y') {
           b_PrintNavD = false;
           cout << "Present Navdata accepted\n";
@@ -786,7 +786,7 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
       if (b_PrintNavD) WriteNavdata(); // Print the new Navdata to config file
   }
 
-  double GetUserInput(double NavData, int min, int max) {
+  double GetUserInput(const double &NavData, const int &min, const int &max) {
           double x;
           cin >> x;
           if ( x < 1 ) x += 0.1; //Avoid 0 (int 0 = false)
@@ -862,14 +862,14 @@ double NMEA_degToDecDegr(double NMEA_deg, int LL) {
   }
 
   void PrintUserInfo(void) {
-      cout << "\n     Hit Esc or Space to exit the program.\n"
-          << "     Hit P to show or hide NMEA messaging to screen\n"
-          << "     Hit R to restart navigation from initial/saved position\n"
-          << "     Hit S to save all actual navdata to the config file\n"
-          << "     Hit ? or _ to instantly change wind direction 10 degr up or down\n"
+      cout << "\n     Press Esc or Space to exit the program.\n"
+          << "     Press P to show or hide NMEA messaging to screen\n"
+          << "     Press R to restart navigation from initial/saved position\n"
+          << "     Press S to save all actual navdata to the config file\n"
+          << "     Press ? or _ to instantly change wind direction 10 degr up or down\n"
           << "     Unless course is obtained from serial input you can:\n"
-          << "     Hit + or - to instantly change course 10 degr up or down\n"
-          << "     Hit any other key to change the initial course to a new value.\n\n";
+          << "     Press + or - to instantly change course 10 degr up or down\n"
+          << "     Press any other key to change the initial course to a new value.\n\n";
   }
 
   void OnKeyPress(void) {
