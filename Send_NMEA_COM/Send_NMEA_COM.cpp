@@ -38,7 +38,9 @@ double d_Heel = 2.0, d_Pitch = 1; //Heel & Pitch angle
 double M_PI = 3.141592654;
 int InfoCount = 0;
 int testsum(string);
+int WPL_count = 0;
 char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT [50], NMEA_MDA [70], NMEA_XDR[80];
+char NMEA_WPL[50];
 double d_long = Def_Long, d_Lat = Def_Lat;
 bool esc = false;
 double STW = 6.20;      //STW for VHW
@@ -47,6 +49,7 @@ bool Quit = false;
 bool TorR = false;
 bool hideNMEA = false;
 bool RadarHeading = false, RAHeadIsValid = false;
+bool SendWPL = false;
 clock_t PosTimer = 1; // clock();
 clock_t PauseTimer1 = 1; // clock();
 clock_t PauseTimer2 = 1; // clock();
@@ -55,6 +58,7 @@ clock_t PauseTimer4 = 1; // clock();
 clock_t PauseTimer5 = 1; // clock();
 clock_t LastWindMes = 1; // clock();
 clock_t LastHDTMes = 1; // clock();
+clock_t wpltimer = clock();
 //TODO check if found:
 string userdata = getenv("USERPROFILE");
 HANDLE hSerial; //COM port handler
@@ -75,6 +79,7 @@ void MakeNMEA_MWV(bool);
 void MakeNMEA_DBT( void );
 void MakeNMEA_MDA(void);
 void MakeNMEA_XDR(void);
+void MakeWPL(void);
 double GetUserInput( const double &NavData, const int &min, const int &max );
 void ReadNavData(void);
 void WriteNavdata(void);
@@ -331,6 +336,18 @@ int main()
                 if (!hideNMEA) fprintf_s(stderr, NMEA_XDR); //\n finns i strängen
             }
             PauseTimer5 = clock();
+        }
+
+        if (SendWPL && (clock() - wpltimer) > 100000) {
+            wpltimer = clock();
+            MakeWPL();
+            if (!WriteFile(hSerial, NMEA_WPL, strlen(NMEA_WPL), &bytes_written, NULL)) {
+                fprintf_s(stderr, "Error. Press a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+            }
+            if (!hideNMEA) fprintf_s(stderr, NMEA_WPL); //\n finns i strängen
         }
 
         ReadSerial(); //Read serial port for NMEA messages
@@ -657,6 +674,36 @@ void MakeNMEA_VHW() {
             NMEA_DBT[a] = nmea [a];
         }
 }
+
+     void MakeWPL() {
+         // $--WPL,llll.ll,a,yyyyy.yy,a,c--c*hh<CR><LF>
+         string WP_Name = "WP";
+         WPL_count++;
+         WP_Name += to_string(WPL_count);
+         string s_Lat = static_cast<ostringstream*>(&(ostringstream() << setprecision(4) << fixed << d_Lat))->str();
+         string s_Long = static_cast<ostringstream*>(&(ostringstream() << setprecision(4) << fixed << d_long))->str();
+         string s_d_SOG = static_cast<ostringstream*>(&(ostringstream() << setprecision(3) << fixed << d_SOG))->str();
+         string nmea = "$IIWPL,";
+         nmea += s_Lat;        //Lat
+         nmea += ",";
+         nmea += N_S;        //N/S
+         nmea += ",";
+         nmea += s_Long;       //Long
+         nmea += ",";
+         nmea += E_W;        //E/W
+         nmea += ",";
+         nmea += WP_Name;        //WP Name
+         nmea += '*';
+         nmea += static_cast<ostringstream*>(&(ostringstream() << hex << testsum(nmea)))->str();
+         nmea += "\r";
+         nmea += "\n";
+
+         int Lens = nmea.size();
+         memset(NMEA_WPL, NULL, sizeof(NMEA_WPL)); //Clear the array
+         for (int a = 0; a < Lens; a++) {
+             NMEA_WPL[a] = nmea[a];
+         }
+     }
    
 // Calculates the Checksum for the NMEA string
 int testsum(string strN) {
@@ -918,6 +965,14 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           pIsTouched = true;
           WriteNavdata();
           cout << " All present navdata are saved to config file\n";
+          break;
+      case 'w':
+      case 'W':
+          pIsTouched = true;
+          SendWPL = !SendWPL;
+          if (SendWPL) {
+              cout << " Now we send WPL\n";
+          } else cout << " Stop sending WPL\n";
           break;
       case '?':
           d_TWA_init += 10;
