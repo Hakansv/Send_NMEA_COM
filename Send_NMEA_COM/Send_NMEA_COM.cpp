@@ -86,6 +86,7 @@ void WriteNavdata(void);
 void FormatCourseData(void);
 void PrintUserInfo(void);
 void OnKeyPress(void);
+void PrintWPLtoFile(void);
 int getNbrOfBytes( void );
 void ReadSerial( void );
 void StopNMEACourse( void );
@@ -338,7 +339,7 @@ int main()
             PauseTimer5 = clock();
         }
 
-        if (SendWPL && (clock() - wpltimer) > 100000) {
+        if (SendWPL && (clock() - wpltimer) > 50000) {
             wpltimer = clock();
             MakeWPL();
             if (!WriteFile(hSerial, NMEA_WPL, strlen(NMEA_WPL), &bytes_written, NULL)) {
@@ -348,6 +349,7 @@ int main()
                 return 1;
             }
             if (!hideNMEA) fprintf_s(stderr, NMEA_WPL); //\n finns i strängen
+            PrintWPLtoFile();
         }
 
         ReadSerial(); //Read serial port for NMEA messages
@@ -916,6 +918,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           << "     Press ? or _ to instantly change wind direction 10 degr up or down\n"
           << "     Unless course is obtained from serial input you can:\n"
           << "     Press + or - to instantly change course 10 degr up or down\n"
+          << "     Press W to make WPL message and also print to file\n"
           << "     Press any other key to change the initial course to a new value.\n\n";
   }
 
@@ -1044,6 +1047,23 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       double d_AWS_part = ( x / ( sin( (d_AWA_Q)*M_PI / 180 ) ) );
       d_AWS_kn = d_TWS_kn + m * ( d_AWS_part - d_TWS_kn ); //Downwind it's negative
 }
+
+  void PrintWPLtoFile() {
+      string filePath = userdata;
+      filePath += "\\SendNMEACOM";
+      if (CreateDirectoryA(filePath.c_str(), NULL) ||
+          ERROR_ALREADY_EXISTS == GetLastError()) {
+          filePath += "\\WPLmess.txt";
+          ofstream myfile;
+          myfile.open(filePath, ios::app);
+          if (myfile.is_open()) {
+              string WPLString = NMEA_WPL;
+              WPLString.pop_back(); //Delete the last char(\n) to avoid empty rows in txt-file
+              myfile << WPLString;
+              myfile.close();
+          }
+      }
+  }
 
   void ReadSerial( void ) {
       DWORD dwReading = 0;
