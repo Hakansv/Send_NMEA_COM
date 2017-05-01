@@ -49,7 +49,8 @@ bool Quit = false;
 bool TorR = false;
 bool hideNMEA = false;
 bool RadarHeading = false, RAHeadIsValid = false;
-bool SendWPL = false;
+//bool SendWPL = false; //Contflict??
+bool RecordAISdata = false;
 clock_t PosTimer = 1; // clock();
 clock_t PauseTimer1 = 1; // clock();
 clock_t PauseTimer2 = 1; // clock();
@@ -90,6 +91,8 @@ void PrintWPLtoFile(void);
 int getNbrOfBytes( void );
 void ReadSerial( void );
 void StopNMEACourse( void );
+void WriteAISdata(void);
+
 enum Lat_long { LAT = 1, LON = 2};
 
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n";
@@ -243,8 +246,10 @@ int main()
             }
             if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
         }
-        if (( ( clock() - PosTimer ) / CLOCKS_PER_SEC ) > SecToNextPos)
+        if (((clock() - PosTimer) / CLOCKS_PER_SEC) > SecToNextPos) {
             CalculateNewPos(d_Lat, d_long); // Wait for enough distance to calc a new pos.
+            if (RecordAISdata ) WriteAISdata();
+        }
 
         if (( ( clock() - PauseTimer1 ) ) > 700) {
             if (InfoCount > 20) {
@@ -911,11 +916,12 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   }
 
   void PrintUserInfo(void) {
-      cout << "\n     Press Esc or Space to exit the program.\n"
-          << "     Press P to show or hide NMEA messaging to screen\n"
-          << "     Press R to restart navigation from initial/saved position\n"
-          << "     Press S to save all actual navdata to the config file\n"
-          << "     Press ? or _ to instantly change wind direction 10 degr up or down\n"
+      cout << "\n     Hit Esc or Space to exit the program.\n"
+          << "     Hit P to show or hide NMEA messaging to screen\n"
+          << "     Hit R to restart navigation from initial/saved position\n"
+          << "     Hit S to save all actual navdata to the config file\n"
+          << "     Hit A to record cruising data to AIS_replay txt-file\n"
+          << "     Hit ? or _ to instantly change wind direction 10 degr up or down\n"
           << "     Unless course is obtained from serial input you can:\n"
           << "     Press + or - to instantly change course 10 degr up or down\n"
           << "     Press W to make WPL message and also print to file\n"
@@ -945,6 +951,12 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           if ( RadarHeading ) break;// No course change while heading from radar
           d_Course -= 10;
           if (d_Course < 0) d_Course = 360 + d_Course;
+          break;
+      case 'a':
+      case 'A':
+          pIsTouched = true;
+          RecordAISdata = !RecordAISdata;
+          cout << (RecordAISdata ? "Now prints AIS data to file\n" : "Stop printing AIS data to file\n");
           break;
       case 'p':
       case 'P':
@@ -1193,4 +1205,36 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           n = status.cbInQue;
       }
       return( n );
+  }
+  void WriteAISdata(void) {
+      string MMSI = "266123456",
+          STATUS = "5",
+          SPEED = static_cast<ostringstream*>(&(ostringstream() << setprecision(0) << fixed << d_SOG * 10))->str(),
+          a_LON = static_cast<ostringstream*>(&(ostringstream() << setprecision(7) << fixed << NMEA_degToDecDegr(d_long, LON)))->str(),
+          a_LAT = static_cast<ostringstream*>(&(ostringstream() << setprecision(7) << fixed << NMEA_degToDecDegr(d_Lat, LAT)))->str(),
+          COURSE = static_cast<ostringstream*>(&(ostringstream() << setprecision(0) << fixed << d_Course))->str(),
+          HEADING = COURSE, //s_Mag,
+          TIMESTAMP = "2016-12-28T20:19:47",
+          SHIP_ID = "225704";
+      string filePath = userdata;
+      filePath += "\\SendNMEACOM";
+      if (CreateDirectoryA(filePath.c_str(), NULL) ||
+          ERROR_ALREADY_EXISTS == GetLastError()) {
+          filePath += "\\ais_simul.txt";
+          ofstream myfile;
+          myfile.open(filePath, ios::app);
+          if (myfile.is_open()) {
+              myfile << "MMSI=\"" << MMSI << "\" "
+                  << "STATUS=\"" << STATUS << "\" "
+                  << "SPEED=\"" << SPEED << "\" "
+                  << "LON=\"" << a_LON << "\" "
+                  << "LAT=\"" << a_LAT << "\" "
+                  << "COURSE=\"" << COURSE << "\" "
+                  << "HEADING=\"" << HEADING << "\" "
+                  << "TIMESTAMP=\"" << TIMESTAMP << "\" "
+                  << "SHIP_ID=\"" << SHIP_ID << "\"\n";
+              myfile.close();
+              //cout << "\n" << "New AISdata was saved to:\n" << filePath << "\n";
+          } else cout << "Unable to open file ais_simul.txt to write\n";
+      } else cout << "Sorry, Unable to create file directory: " << filePath << "\n";
   }
