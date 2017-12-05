@@ -49,7 +49,7 @@ bool Quit = false;
 bool TorR = false;
 bool hideNMEA = false;
 bool RadarHeading = false, RAHeadIsValid = false;
-//bool SendWPL = false; //Contflict??
+bool SendWPL = false; //Contflict??
 bool RecordAISdata = false;
 clock_t PosTimer = 1; // clock();
 clock_t PauseTimer1 = 1; // clock();
@@ -1106,11 +1106,12 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
                           delimiter = ",";
                           break;
                       case 1:
-                          d_newcourse = stod(token [1]);
+                          d_newcourse = stod(token [y]);
                           delimiter = "*"; // Last token has no ','  //$RAHDT  $HCHDM
                           break;
                       case 2:
-                          courseunit = token [2];
+                          courseunit = "T"; // token[y];
+                          //cout << courseunit;
                           delimiter = "$";  //Find next sentance
                           continue;
                           break;
@@ -1161,7 +1162,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
                   y++;
               }
 
-              if (d_newcourse && "T" == courseunit) { //True heading
+              if (d_newcourse && "T" == (courseunit)) { //True heading
                   // Increased XTE action for the simulation, XTE is normally like 0.015
                   double dXTE_factor = d_XTE > 0.1 ? ( d_XTE > 0.5 ? 10 : 50 ) : 100; // Like Excel hmmmm!?
                   d_newcourse = ("L" == XTE_Dir ? d_newcourse - dXTE_factor * d_XTE : d_newcourse + dXTE_factor * d_XTE);
