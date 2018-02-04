@@ -62,6 +62,7 @@ clock_t LastHDTMes = 1; // clock();
 clock_t wpltimer = clock();
 //TODO check if found:
 string userdata = getenv("USERPROFILE");
+string s_navdatafile;
 HANDLE hSerial; //COM port handler
 DWORD bytes_written, total_bytes_written = 0;
 
@@ -96,11 +97,14 @@ void WriteAISdata(void);
 enum Lat_long { LAT = 1, LON = 2};
 
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n";
-string msg1 = "And read NMEA RAHDT from the same port and if available using it as course\n";
+string msg1 = "Read NMEA RAHDT from the same port and if available using it as course\n\n";
+string msg2 = "Nav data is read from file : ";
 
-int main()
+int main(int argc, char *argv [])
 {
-    cout << msg << msg1;
+  //Check for a command argument
+  s_navdatafile = argc > 1 ? argv[1] : "navdata.cnv";
+  cout << msg << msg1 << msg2 << s_navdatafile << "\n";
     // Define some static NMEA messages
     char NMEA_MTW[] = "$IIMTW,14.7,C*11\r\n";
     //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
@@ -857,8 +861,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   
   void ReadNavData(void) {
       bool file_eof = false;
-      string filePath = userdata;
-      filePath += "\\SendNMEACOM\\navdata.cnv";
+      string filePath = userdata + "\\SendNMEACOM\\";
+      filePath += s_navdatafile;
       ifstream myfile(filePath);
       if (myfile.is_open())
       {
@@ -883,7 +887,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           myfile.close();
       }
       else {
-          cout << "Unable to find the Navdata file. I'll make a new one\n";
+          cout << "\n\nUnable to find the Navdata file. I'll make a new one\n";
           WriteNavdata();
       }
       if (file_eof) WriteNavdata(); //Navdata file corrupt. False user input??
@@ -891,11 +895,11 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
 
   void WriteNavdata(void) {
       string filePath = userdata;
-      filePath += "\\SendNMEACOM";
+      filePath += "\\SendNMEACOM\\";
       if (CreateDirectoryA(filePath.c_str(), NULL) ||
           ERROR_ALREADY_EXISTS == GetLastError())
       {
-          filePath += "\\navdata.cnv";
+          filePath += s_navdatafile;
           ofstream myfile;
           myfile.open(filePath, ios::trunc);
           if (myfile.is_open())
