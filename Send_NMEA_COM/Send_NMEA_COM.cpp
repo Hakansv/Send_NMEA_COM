@@ -861,8 +861,14 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   
   void ReadNavData(void) {
       bool file_eof = false;
-      string filePath = userdata + "\\SendNMEACOM\\";
-      filePath += s_navdatafile;
+      string filePath;
+      //Check for full file path.
+      if (s_navdatafile.find(":\\") == std::string::npos) {
+        //Disk path not found. Add the user path
+        s_navdatafile = userdata + "\\SendNMEACOM\\" + s_navdatafile;
+      }
+      filePath = s_navdatafile;
+
       ifstream myfile(filePath);
       if (myfile.is_open())
       {
@@ -899,7 +905,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       if (CreateDirectoryA(filePath.c_str(), NULL) ||
           ERROR_ALREADY_EXISTS == GetLastError())
       {
-          filePath += s_navdatafile;
+          filePath = s_navdatafile; //Correct path fixed in ReadNavData()
           ofstream myfile;
           myfile.open(filePath, ios::trunc);
           if (myfile.is_open())
