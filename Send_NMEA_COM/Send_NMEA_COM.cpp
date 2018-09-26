@@ -20,7 +20,7 @@ string s_Mag = "272.1"; //Heading for NMEA
 double d_Course = 282.1;  //Course to steer
 double d_SOG = 6.5;    //Speed to run
 double Def_Lat = 5803.200, Def_Long = 01122.100; //NMEA-Format!! Initial position for the cruise, N/E :)
-string N_S = "N", E_W = "E";
+string s_NS = "N", s_EW = "E";
 double wmm = 3.0; //Variation to calc HDM from Course
 
 //Others
@@ -394,11 +394,11 @@ void MakeNMEA() {
   nmea += "A,";         //Valid
   nmea += s_Lat;        //Lat
   nmea += ",";
-  nmea += N_S;        //N/S
+  nmea += s_NS;        //N/S
   nmea += ",";
   nmea += s_Long;       //Long
   nmea += ",";
-  nmea += E_W;        //E/W
+  nmea += s_EW;        //E/W
   nmea += ",";
   nmea += s_d_SOG + ",";  //d_SOG 
   nmea +=  s_Cog;         //s_Cog 
@@ -697,11 +697,11 @@ void MakeNMEA_VHW() {
          string nmea = "$IIWPL,";
          nmea += s_Lat;        //Lat
          nmea += ",";
-         nmea += N_S;        //N/S
+         nmea += s_NS;        //N/S
          nmea += ",";
          nmea += s_Long;       //Long
          nmea += ",";
-         nmea += E_W;        //E/W
+         nmea += s_EW;        //E/W
          nmea += ",";
          nmea += WP_Name;        //WP Name
          nmea += '*';
@@ -783,8 +783,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
     double degs = (int)(NMEA_deg / 100.0);
     double mins = NMEA_deg - degs * 100.0;
     double Dec_degs = degs + mins / 60.0;
-    if (LL == LAT) { if (N_S == "S") Dec_degs = -Dec_degs; }
-    if (LL == LON) { if (E_W == "W") Dec_degs = -Dec_degs; }
+    if (LL == LAT) { if (s_NS == "S") Dec_degs = -Dec_degs; }
+    if (LL == LON) { if (s_EW == "W") Dec_degs = -Dec_degs; }
     return Dec_degs;
 }
 
@@ -792,12 +792,12 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       
       if (Pos_in < 0) {
           Pos_in = -Pos_in;
-          if (LL == LAT) N_S = "S";
-          if (LL == LON) E_W = "W";
+          if (LL == LAT) s_NS = "S";
+          if (LL == LON) s_EW = "W";
       }
       else {
-          if (LL == LAT) N_S = "N";
-          if (LL == LON) E_W = "E";
+          if (LL == LAT) s_NS = "N";
+          if (LL == LON) s_EW = "E";
       }
       double f_Degr = (int)(Pos_in);
       double f_Min = (Pos_in - f_Degr) * 60.0;
@@ -808,8 +808,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   void GetNavData(void) {
       bool b_PrintNavD = true;
       cout << "\n Present Navdata:\n"
-          << " Initial Latitude: " << (d_Lat = NMEA_degToDecDegr(d_Lat, LAT)) << "\n"
-          << " Initial Longitude: " << (d_long = NMEA_degToDecDegr(d_long, LON)) << "\n"
+          << " Initial Latitude: " << (d_Lat = NMEA_degToDecDegr(d_Lat, LAT)) << " " << s_NS << "\n"
+          << " Initial Longitude: " << (d_long = NMEA_degToDecDegr(d_long, LON)) << " " << s_EW << "\n"
           << " Course: " << d_Course << "\n"
           << " Variation: " << wmm << "\n"
           << " Speed knots: " << d_SOG;
@@ -819,25 +819,31 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           b_PrintNavD = false;
           cout << "Present Navdata accepted\n";
       } else {
-          cout << "Enter a latitude instead of: " << d_Lat << ". Enter any char a-z to skip to next\n";
+          cout << "Enter a latitude instead of: " << d_Lat << " Negative for S. Enter zero, 0, to skip to next\n";
           double test = GetUserInput(d_Lat, -90, 90);
-          if (test) { d_Lat = test; } // cout << "New value: " << d_Lat << "\n";
+          if (test != 0 ) { 
+            d_Lat = test; 
+            s_NS = d_Lat >= 0.0 ? "N" : "S";
+          } // cout << "New value: " << d_Lat << "\n";
 
-          cout << "Enter a longitude instead of: " << d_long << ". Enter any char a-z to skip to next\n";
+          cout << "Enter a longitude instead of: " << d_long << " Negative for W. Enter zero, 0, to skip to next\n";
           test = GetUserInput(d_long, -180, 180);
-          if (test) { d_long = test; } // cout << "New value: " << d_long << "\n";
+          if (test != 0) { 
+            d_long = test; 
+            s_EW = d_long >= 0.0 ? "E" : "S";
+          } // cout << "New value: " << d_long << "\n";
 
-          cout << "Enter a Course instead of: " << d_Course << ". Enter any char a-z to skip to next\n";
+          cout << "Enter a Course instead of: " << d_Course << ". Enter zero, 0, to skip to next\n";
           test = GetUserInput(d_Course, 0, 360);
-          if (test) { d_Course = test; } // cout << "New value: " << d_Course << "\n";
+          if (test != 0) { d_Course = test; } // cout << "New value: " << d_Course << "\n";
           
-          cout << "Enter a variation, + > E : - > W, instead of: " << wmm << ". Enter any char a-z to skip to next\n";
-          test = GetUserInput(wmm, 0, 360);
-          if (test) { wmm = test; } // cout << "New value: " << d_Course << "\n";
+          cout << "Enter a variation, + > E : - > W, instead of: " << wmm << ". Enter zero, 0, to skip to next\n";
+          test = GetUserInput(wmm, -161, 161);
+          if (test != 0) { wmm = test; } // cout << "New value: " << d_Course << "\n";
 
-          cout << "Enter a Speed instead of: " << d_SOG << ". Enter any char a-z to skip.\n";
+          cout << "Enter a Speed instead of: " << d_SOG << ". Enter zero, 0, to skip.\n";
           test = GetUserInput(d_SOG, 0, 50);
-          if (test) { d_SOG = test; } //cout << "New value: " << d_SOG << "\n"; }
+          if (test != 0) { d_SOG = test; } //cout << "New value: " << d_SOG << "\n"; }
       }
       d_Lat = DegrPosToNMEAPos(d_Lat, LAT); //Back to NMEA format
       d_long = DegrPosToNMEAPos(d_long, LON); //Back to NMEA format
@@ -847,15 +853,15 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   double GetUserInput(const double &NavData, const int &min, const int &max) {
           double x;
           cin >> x;
-          if ( x < 1 ) x += 0.1; //Avoid 0 (int 0 = false)
+          //if ( x != 0 ) x += 0.1; //Avoid 0 (int 0 = false)
           cin.clear();
           cin.ignore(10000, '\n');
-          if ( x >= min && x <= max ) {
+          if ( x >= min && x <= max && x != 0) {
               return x;
           }
           else {
               cout << "No change to: " << NavData << "\n\n";
-              return NULL;
+              return 0;
           }
   }
   
@@ -872,8 +878,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       ifstream myfile(filePath);
       if (myfile.is_open())
       {
-          string s_Nav[7];
-          for (int i = 0; i < 7; ++i)
+          string s_Nav[9];
+          for (int i = 0; i < 9; ++i)
           {
               if (myfile.eof()) {
                   file_eof = true;
@@ -883,12 +889,14 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           }
           if (!file_eof) {
               d_Lat = std::stod(s_Nav[0]);
-              d_long = std::stod(s_Nav[1]);
-              d_Course = std::stod(s_Nav[2]);
-              wmm = std::stod(s_Nav[3]);
-              d_SOG = std::stod(s_Nav[4]);
-              d_TWA_init = std::stod( s_Nav [5] );
-              d_TWS_kn = std::stod( s_Nav [6] );
+              s_NS = s_Nav[1];
+              d_long = std::stod(s_Nav[2]);
+              s_EW = s_Nav[3];
+              d_Course = std::stod(s_Nav[4]);
+              wmm = std::stod(s_Nav[5]);
+              d_SOG = std::stod(s_Nav[6]);
+              d_TWA_init = std::stod( s_Nav [7] );
+              d_TWS_kn = std::stod( s_Nav [8] );
           }
           myfile.close();
       }
@@ -911,7 +919,9 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           if (myfile.is_open())
           {
               myfile << d_Lat << "\n";
+              myfile << s_NS << "\n";
               myfile << d_long << "\n";
+              myfile << s_EW << "\n";
               myfile << d_Course << "\n";
               myfile << wmm << "\n";
               myfile << d_SOG << "\n";
@@ -1014,9 +1024,9 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       default:
          if ( RadarHeading ) break; // No course change while heading from radar
           string keys;
-          cout << "Enter a new course instead of: " << d_Course << " Or any letter to quit\n";
+          cout << "Enter a new course instead of: " << d_Course << " Or zero \"0\" to quit\n";
           double NewCourse = d_Course;
-          NewCourse = GetUserInput(NewCourse, 0, 360);
+          NewCourse = GetUserInput(NewCourse, 0.01, 360);
           if (NewCourse) {
               d_Course = NewCourse;
               d_CourseTemp = d_Course;  //Save the new course in temp.
