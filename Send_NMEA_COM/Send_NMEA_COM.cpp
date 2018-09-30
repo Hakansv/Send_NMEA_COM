@@ -12,7 +12,20 @@
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
+
+#pragma comment(lib,"ws2_32.lib") //Winsock Library
+#define SERVER "127.0.0.1" //"127.0.0.1"  //ip address of udp server192.168.1.255
+#define BUFLEN 512  //Max length of buffer
+#define PORT 10110   //The port on which to send data
+
 using namespace std;
+
+//Socket
+struct sockaddr_in server, si_other;
+int sock, slen = sizeof(si_other), recv_len;
+char buf[BUFLEN];
+char message[BUFLEN];
+WSADATA wsa;
 
 //Initial Nav-data variables when no config file is present
 string s_Cog = "272.1";  //Degres value for Cog
@@ -65,6 +78,8 @@ string userdata = getenv("USERPROFILE");
 string s_navdatafile;
 HANDLE hSerial; //COM port handler
 DWORD bytes_written, total_bytes_written = 0;
+unsigned int PgmMode = 1; // User selected program mode. 1:Serial, 2:UDP-IP, 3:Both
+bool Last = false;
 
 //Functions
 void CalculateNewPos( const double &Lat_in, const double &Long_in );
@@ -93,11 +108,14 @@ int getNbrOfBytes( void );
 void ReadSerial( void );
 void StopNMEACourse( void );
 void WriteAISdata(void);
+bool InitSerialPort(void);
+bool InitWinsock(void);
+void SendNMEAtoIP(char s_nmea[80]);
 
 enum Lat_long { LAT = 1, LON = 2};
 
 string msg = "\n\n****************** Send NMEA data to a COM port. *****************\n";
-string msg1 = "Read NMEA RAHDT from the same port and if available using it as course\n\n";
+string msg1 = "Read NMEA RAHDT or ECAPB from the same port and if available using it as course\n\n";
 string msg2 = "Nav data is read from file : ";
 
 int main(int argc, char *argv [])
@@ -109,114 +127,35 @@ int main(int argc, char *argv [])
     char NMEA_MTW[] = "$IIMTW,14.7,C*11\r\n";
     //char NMEA_DBT[] = "$IIDBT,37.9,f,11.5,M,6.3,F*1C\r\n";
    
-    // Declare variables and structures
-    bool Last = false;
-    DCB dcbSerialParams = {0};
-    COMMTIMEOUTS timeouts = {0};
-    char s[20];
-    wchar_t pcCommPort[20];
-    char Port[10];
-
     ReadNavData(); //Read Navdata from file
-    fprintf_s(stderr, "\nNow searching for a useable port.....\n");
 
-    // Use FileOpen()
-    // Try all 255 possible COM ports, check to see if it can be opened, or if
-    // not, that an expected error is returned.
+    //char answer;
+    fprintf(stderr, "Do you want to send data based on %s to:\n", s_navdatafile);
+    _cputs("Press \"1\" to use IP-UDP port 10110\nPress \"2\" to use Serial-COM port\n");
+    char answer = toupper(_getch());
+    //else cout << "Not an expected input\n";
 
-    for (int j = 1; j<256; j++)
-    {
-        sprintf_s(s, "\\\\.\\COM%d", j);
-        mbstowcs(pcCommPort, s, strlen(s) + 1); //Plus null
-        sprintf_s(Port, "COM%d",j);
-        // Open the port tentatively
-        HANDLE hComm = ::CreateFile(pcCommPort, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
+    if (answer == '1') PgmMode = 1;
+    if (answer == '2') PgmMode = 2;
+    switch (PgmMode) {
+      //int Dummy;
+    case 1:
+      cout << "\nNow connect to IP-net.....\n";
+      //Dummy = toupper(_getch()); //Empty getch
+      InitWinsock();
+      break;
 
-        //  Check for the error returns that indicate a port is there, but not currently useable
-        if (hComm == INVALID_HANDLE_VALUE)
-        {
-            DWORD dwError = GetLastError();
-
-            if (dwError == ERROR_ACCESS_DENIED ||
-                dwError == ERROR_GEN_FAILURE ||
-                dwError == ERROR_SHARING_VIOLATION ||
-                dwError == ERROR_SEM_TIMEOUT)
-                fprintf_s(stderr, "\nFound serial port COM%d. But it's not ready to use\n", j);
-        }
-        else
-        {
-            CloseHandle(hComm);
-            fprintf_s(stderr, "\nFound serial port COM%d and it's ready to use", j);
-            _cputs("\nPress key \"y\" to use that port. Any other key continuing search\n");
-            if (toupper(_getch()) == 'Y') break;
-            //else:
-            continue;
-        }
-        
-        Quit = j == 255 ?  true : false; //When for is ended and no port found
+    case 2:
+        cout << "\nNow searching for a useable port.....\n";
+        //Dummy = toupper(_getch()); //Empty getch
+        if (InitSerialPort());
+        //TODO felhandling
+        break;
+      
+    default:
+          return 0;        
     }
     
-    if (Quit) {
-        _cputs("\nNo useable port found or selected - Press any key to exit program");
-        int Dummy = toupper(_getch());
-        return 0; //No port found - exit pgm normally
-    }
-    // Some old stuff for info........
-    //char Port[] = "COM1"; //Work around to get text
-    //TCHAR *pcCommPort = TEXT("\\\\.\\COM1");
-    // The \\\\.\\ is only needed for COM10 and above
-         
-    // Open serial port number
-    fprintf_s(stderr, "\nOpening serial port: %s .........", Port);
-    hSerial = CreateFile(
-                pcCommPort, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
-
-    if (hSerial == INVALID_HANDLE_VALUE)
-    {
-            fprintf_s(stderr, "Error. Press a key to exit\n");
-            int Dummy = toupper(_getch());
-            return 1;
-    }
-    else fprintf_s(stderr, "OK\n");
-	
-     
-    // Set device parameters (4800 baud, 1 start bit,
-    // 1 stop bit, no parity)
-    dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
-    if (GetCommState(hSerial, &dcbSerialParams) == 0)
-    {
-        fprintf_s(stderr, "Error getting device state. Press a key to exit\n");
-        CloseHandle(hSerial);
-        int Dummy = toupper(_getch());
-        return 1;
-    }
-     
-    dcbSerialParams.BaudRate = CBR_4800;
-    dcbSerialParams.ByteSize = 8;
-    dcbSerialParams.StopBits = ONESTOPBIT;
-    dcbSerialParams.Parity = NOPARITY;
-    if(SetCommState(hSerial, &dcbSerialParams) == 0)
-    {
-        fprintf_s(stderr, "Error setting device parameters. Press a key to exit\n");
-        CloseHandle(hSerial);
-        int Dummy = toupper(_getch());
-        return 1;
-    }
- 
-    // Set COM port timeout settings
-    timeouts.ReadIntervalTimeout = 50;
-    timeouts.ReadTotalTimeoutConstant = 50;
-    timeouts.ReadTotalTimeoutMultiplier = 10;
-    timeouts.WriteTotalTimeoutConstant = 50;
-    timeouts.WriteTotalTimeoutMultiplier = 10;
-    if(SetCommTimeouts(hSerial, &timeouts) == 0)
-    {
-        fprintf_s(stderr, "Error setting timeouts. Press a key to exit\n");
-        CloseHandle(hSerial);
-        int Dummy = toupper(_getch());
-        return 1;
-    }
  
     GetNavData();        //Ask if Navdata from file shall be changed.
     FormatCourseData();
@@ -242,12 +181,18 @@ int main(int argc, char *argv [])
             TorR = !TorR;
             LastWindMes = clock();
             //Send MWV > Wind speeed and realtive angle
-            if (!WriteFile(hSerial, MWV_NMEA, strlen(MWV_NMEA), &bytes_written, NULL)) {
+            if (PgmMode == 1) {
+              SendNMEAtoIP(MWV_NMEA);
+            }
+            if (PgmMode == 2) {
+              if (!WriteFile(hSerial, MWV_NMEA, strlen(MWV_NMEA), &bytes_written, NULL)) {
                 fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
+              }
             }
+           
             if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
         }
         if (((clock() - PosTimer) / CLOCKS_PER_SEC) > SecToNextPos) {
@@ -1258,4 +1203,134 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
               //cout << "\n" << "New AISdata was saved to:\n" << filePath << "\n";
           } else cout << "Unable to open file ais_simul.txt to write\n";
       } else cout << "Sorry, Unable to create file directory: " << filePath << "\n";
+  }
+
+  bool InitSerialPort(void) {
+    // Declare variables and structures
+    DCB dcbSerialParams = { 0 };
+    COMMTIMEOUTS timeouts = { 0 };
+    char s[20];
+    wchar_t pcCommPort[20];
+    char Port[10];
+    // Use FileOpen()
+    // Try all 255 possible COM ports, check to see if it can be opened, or if
+    // not, that an expected error is returned.
+
+    for (int j = 1; j < 256; j++) {
+      sprintf_s(s, "\\\\.\\COM%d", j);
+      mbstowcs(pcCommPort, s, strlen(s) + 1); //Plus null
+      sprintf_s(Port, "COM%d", j);
+      // Open the port tentatively
+      HANDLE hComm = ::CreateFile(pcCommPort, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
+
+      //  Check for the error returns that indicate a port is there, but not currently useable
+      if (hComm == INVALID_HANDLE_VALUE) {
+        DWORD dwError = GetLastError();
+
+        if (dwError == ERROR_ACCESS_DENIED ||
+          dwError == ERROR_GEN_FAILURE ||
+          dwError == ERROR_SHARING_VIOLATION ||
+          dwError == ERROR_SEM_TIMEOUT)
+          fprintf_s(stderr, "\nFound serial port COM%d. But it's not ready to use\n", j);
+      } else {
+        CloseHandle(hComm);
+        fprintf_s(stderr, "\nFound serial port COM%d and it's ready to use", j);
+        _cputs("\nPress key \"y\" to use that port. Any other key continuing search\n");
+        if (toupper(_getch()) == 'Y') break;
+        //else:
+        continue;
+      }
+
+      Quit = j == 255 ? true : false; //When for is ended and no port found
+    }
+
+    if (Quit) {
+      _cputs("\nNo useable port found or selected - Press any key to exit program");
+      int Dummy = toupper(_getch());
+      return 0; //No port found - exit pgm normally
+    }
+    // Some old stuff for info........
+    //char Port[] = "COM1"; //Work around to get text
+    //TCHAR *pcCommPort = TEXT("\\\\.\\COM1");
+    // The \\\\.\\ is only needed for COM10 and above
+
+    // Open serial port number
+    fprintf_s(stderr, "\nOpening serial port: %s .........", Port);
+    hSerial = CreateFile(
+      pcCommPort, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (hSerial == INVALID_HANDLE_VALUE) {
+      fprintf_s(stderr, "Error. Press a key to exit\n");
+      int Dummy = toupper(_getch());
+      return 1;
+    } else fprintf_s(stderr, "OK\n");
+
+
+    // Set device parameters (4800 baud, 1 start bit,
+    // 1 stop bit, no parity)
+    dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+    if (GetCommState(hSerial, &dcbSerialParams) == 0) {
+      fprintf_s(stderr, "Error getting device state. Press a key to exit\n");
+      CloseHandle(hSerial);
+      int Dummy = toupper(_getch());
+      return 1;
+    }
+
+    dcbSerialParams.BaudRate = CBR_4800;
+    dcbSerialParams.ByteSize = 8;
+    dcbSerialParams.StopBits = ONESTOPBIT;
+    dcbSerialParams.Parity = NOPARITY;
+    if (SetCommState(hSerial, &dcbSerialParams) == 0) {
+      fprintf_s(stderr, "Error setting device parameters. Press a key to exit\n");
+      CloseHandle(hSerial);
+      int Dummy = toupper(_getch());
+      return 1;
+    }
+
+    // Set COM port timeout settings
+    timeouts.ReadIntervalTimeout = 50;
+    timeouts.ReadTotalTimeoutConstant = 50;
+    timeouts.ReadTotalTimeoutMultiplier = 10;
+    timeouts.WriteTotalTimeoutConstant = 50;
+    timeouts.WriteTotalTimeoutMultiplier = 10;
+    if (SetCommTimeouts(hSerial, &timeouts) == 0) {
+      fprintf_s(stderr, "Error setting timeouts. Press a key to exit\n");
+      CloseHandle(hSerial);
+      int Dummy = toupper(_getch());
+      return 1;
+    }
+    return true;
+  }
+
+  bool InitWinsock(void) {
+  //Initialise winsock
+  printf("\nInitialising Winsock IP connection...");
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    printf("Failed. Error Code : %d", WSAGetLastError());
+    exit(EXIT_FAILURE);
+  }
+  printf("Initialised on port: %d\n", PORT);
+  }
+
+  void SendNMEAtoIP(char s_nmea[80]) {
+    //create socket
+    if ((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == SOCKET_ERROR) {
+      printf("socket() failed with error code : %d", WSAGetLastError());
+      exit(EXIT_FAILURE);
+    }
+
+    //setup address structure
+    memset((char *)&si_other, 0, sizeof(si_other));
+    si_other.sin_family = AF_INET;
+    si_other.sin_port = htons(PORT);
+    si_other.sin_addr.S_un.S_addr = inet_addr(SERVER);  //INADDR_ANY; //inet_addr(SERVER);
+
+    if (sendto(sock, s_nmea, strlen(s_nmea), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR) {
+      printf("sendto() failed with error code : %d", WSAGetLastError());
+      exit(EXIT_FAILURE);
+    }
+    if (!hideNMEA) printf("To IP port:%d  %s\n", PORT, s_nmea);
+
+    closesocket(sock);
   }
