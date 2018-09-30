@@ -14,7 +14,7 @@
 #include <fstream>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
-#define SERVER "127.0.0.1" //"127.0.0.1"  //ip address of udp server192.168.1.255
+#define SERVER "127.0.0.1" //"127.0.0.1"  //ip address of udp server192.168.10.255
 #define BUFLEN 512  //Max length of buffer
 #define PORT 10110   //The port on which to send data
 
@@ -79,6 +79,7 @@ string s_navdatafile;
 HANDLE hSerial; //COM port handler
 DWORD bytes_written, total_bytes_written = 0;
 unsigned int PgmMode = 1; // User selected program mode. 1:Serial, 2:UDP-IP, 3:Both
+bool ReceiveSerial(false);
 bool Last = false;
 
 //Functions
@@ -131,24 +132,29 @@ int main(int argc, char *argv [])
 
     //char answer;
     fprintf(stderr, "Do you want to send data based on %s to:\n", s_navdatafile);
-    _cputs("Press \"1\" to use IP-UDP port 10110\nPress \"2\" to use Serial-COM port\n");
+    _cputs("Press \"1\" to use IP-UDP port 10110\nPress \"2\" to use Serial-COM port\nPress \"3\" to also use Serial-COM port for incoming mes\n");
     char answer = toupper(_getch());
     //else cout << "Not an expected input\n";
 
     if (answer == '1') PgmMode = 1;
     if (answer == '2') PgmMode = 2;
+    if (answer == '3') { PgmMode = 1; ReceiveSerial = true; }
     switch (PgmMode) {
       //int Dummy;
     case 1:
-      cout << "\nNow connect to IP-net.....\n";
-      //Dummy = toupper(_getch()); //Empty getch
-      InitWinsock();
-      break;
-
+        cout << "\nNow connect to IP-net.....\n";
+        //Dummy = toupper(_getch()); //Empty getch
+        InitWinsock();
+        if (ReceiveSerial) {
+          cout << "\nNow also searching for a useable port.....\n";
+          InitSerialPort();
+        }
+        break;
+   
     case 2:
         cout << "\nNow searching for a useable port.....\n";
         //Dummy = toupper(_getch()); //Empty getch
-        if (InitSerialPort());
+        InitSerialPort();
         //TODO felhandling
         break;
       
@@ -219,12 +225,17 @@ int main(int argc, char *argv [])
             } else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
 
             Last = !Last; //Alter between the two every turn
-            if (!WriteFile(hSerial, NMEA, strlen(NMEA), &bytes_written, NULL)) {
+            if (PgmMode == 1) {
+              SendNMEAtoIP(NMEA);
+            }
+            if (PgmMode == 2) {
+              if (!WriteFile(hSerial, NMEA, strlen(NMEA), &bytes_written, NULL)) {
                 cout << bytes_written << " Bytes written \n";
                 fprintf_s(stderr, "Error print NMEA\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
+              }
             }
 
             //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
@@ -233,24 +244,34 @@ int main(int argc, char *argv [])
         }
 
         if (( ( clock() - PauseTimer2 ) ) > 1000) {
+          if (PgmMode == 1) {
+            SendNMEAtoIP(HDM_NMEA);
+          }
+          if (PgmMode == 2) {
             if (!WriteFile(hSerial, HDM_NMEA, strlen(HDM_NMEA), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Press a key to exit\n");
-                CloseHandle(hSerial);
-                int Dummy = toupper(_getch());
-                return 1;
+              fprintf_s(stderr, "Error. Press a key to exit\n");
+              CloseHandle(hSerial);
+              int Dummy = toupper(_getch());
+              return 1;
             }
+          }
             if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
             PauseTimer2 = clock();
         }
 
         if (( ( clock() - PauseTimer3 ) ) > 10000) {
             //Send MTW > Water temperature
+          if (PgmMode == 1) {
+            SendNMEAtoIP(NMEA_MTW);
+          }
+          if (PgmMode == 2) {
             if (!WriteFile(hSerial, NMEA_MTW, strlen(NMEA_MTW), &bytes_written, NULL)) {
-                fprintf_s(stderr, "Error. Press a key to exit\n");
-                CloseHandle(hSerial);
-                int Dummy = toupper(_getch());
-                return 1;
+              fprintf_s(stderr, "Error. Press a key to exit\n");
+              CloseHandle(hSerial);
+              int Dummy = toupper(_getch());
+              return 1;
             }
+          }
             if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
             PauseTimer3 = clock();
         }
@@ -258,11 +279,16 @@ int main(int argc, char *argv [])
         if (( ( clock() - PauseTimer4 ) ) > 1500) {
             //Send NMEA_DBT > Depth
             MakeNMEA_DBT();
-            if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL)) {
+            if (PgmMode == 1) {
+              SendNMEAtoIP(NMEA_DBT);
+            }
+            if (PgmMode == 2) {
+              if (!WriteFile(hSerial, NMEA_DBT, strlen(NMEA_DBT), &bytes_written, NULL)) {
                 fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
+              }
             }
             if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
             PauseTimer4 = clock();
@@ -273,20 +299,30 @@ int main(int argc, char *argv [])
             bool MDA = false;
             if (MDA) {
                 MakeNMEA_MDA(); //0
-                if (!WriteFile(hSerial, NMEA_MDA, strlen(NMEA_MDA), &bytes_written, NULL)) {
+                if (PgmMode == 1) {
+                  SendNMEAtoIP(NMEA_MDA);
+                }
+                if (PgmMode == 2) {
+                  if (!WriteFile(hSerial, NMEA_MDA, strlen(NMEA_MDA), &bytes_written, NULL)) {
                     fprintf_s(stderr, "Error. Press a key to exit\n");
                     CloseHandle(hSerial);
                     int Dummy = toupper(_getch());
                     return 1;
+                  }
                 }
                 if (!hideNMEA) fprintf_s(stderr, NMEA_MDA); //\n finns i strängen
             } else {
                 MakeNMEA_XDR(); //1
-                if (!WriteFile(hSerial, NMEA_XDR, strlen(NMEA_XDR), &bytes_written, NULL)) {
+                if (PgmMode == 1) {
+                  SendNMEAtoIP(NMEA_XDR);
+                }
+                if (PgmMode == 2) {
+                  if (!WriteFile(hSerial, NMEA_XDR, strlen(NMEA_XDR), &bytes_written, NULL)) {
                     fprintf_s(stderr, "Error. Press a key to exit\n");
                     CloseHandle(hSerial);
                     int Dummy = toupper(_getch());
                     return 1;
+                  }
                 }
                 if (!hideNMEA) fprintf_s(stderr, NMEA_XDR); //\n finns i strängen
             }
@@ -296,17 +332,22 @@ int main(int argc, char *argv [])
         if (SendWPL && (clock() - wpltimer) > 50000) {
             wpltimer = clock();
             MakeWPL();
-            if (!WriteFile(hSerial, NMEA_WPL, strlen(NMEA_WPL), &bytes_written, NULL)) {
+            if (PgmMode == 1) {
+              SendNMEAtoIP(NMEA_WPL);
+            }
+            if (PgmMode == 2) {
+              if (!WriteFile(hSerial, NMEA_WPL, strlen(NMEA_WPL), &bytes_written, NULL)) {
                 fprintf_s(stderr, "Error. Press a key to exit\n");
                 CloseHandle(hSerial);
                 int Dummy = toupper(_getch());
                 return 1;
+              }
             }
             if (!hideNMEA) fprintf_s(stderr, NMEA_WPL); //\n finns i strängen
             PrintWPLtoFile();
         }
 
-        ReadSerial(); //Read serial port for NMEA messages
+        if ( ReceiveSerial ) ReadSerial(); //Read serial port for NMEA messages
 
         if (_kbhit()) { //Check the buffer for a key press to exit the program or enter a new course
             OnKeyPress();
@@ -314,16 +355,21 @@ int main(int argc, char *argv [])
         
 } //End of while()
 
-    // Close serial port
-    fprintf_s(stderr, "Closing serial port...");
-    if (CloseHandle(hSerial) == 0)
-    {
-        fprintf_s(stderr, "Error. Press a key to exit\n");
-        int Dummy = toupper(_getch());
-        return 1;
-    }
-    fprintf_s(stderr, "OK\n");
- 
+if (PgmMode == 1) {
+  //Close socket
+  closesocket(sock);
+  WSACleanup();
+}
+if (PgmMode == 2) {
+  // Close serial port
+  fprintf_s(stderr, "Closing serial port...");
+  if (CloseHandle(hSerial) == 0) {
+    fprintf_s(stderr, "Error. Press a key to exit\n");
+    int Dummy = toupper(_getch());
+    return 1;
+  }
+  fprintf_s(stderr, "OK\n");
+}
     // Quit normally
     return 0;
 } //End of main()
@@ -1330,7 +1376,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       printf("sendto() failed with error code : %d", WSAGetLastError());
       exit(EXIT_FAILURE);
     }
-    if (!hideNMEA) printf("To IP port:%d  %s\n", PORT, s_nmea);
+    //if (!hideNMEA) printf("To IP port:%d  %s\n", PORT, s_nmea);
 
     closesocket(sock);
+    
   }
