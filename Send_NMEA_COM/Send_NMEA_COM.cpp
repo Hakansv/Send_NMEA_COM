@@ -12,19 +12,24 @@
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
+//#include <winsock2.h>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
-#define SERVER "127.0.0.1" //"127.0.0.1"  //ip address of udp server192.168.10.255
+#define SERVER "127.0.0.255" //"127.0.0.1"  //ip address of udp server192.168.10.255
 #define BUFLEN 512  //Max length of buffer
 #define PORT 10110   //The port on which to send data
 
 using namespace std;
 
 //Socket
+
 struct sockaddr_in server, si_other;
+struct in_addr addr; 
 int sock, slen = sizeof(si_other), recv_len;
+SOCKET sock_r;
 char buf[BUFLEN];
 char message[BUFLEN];
+char recmessage[BUFLEN];
 WSADATA wsa;
 
 //Initial Nav-data variables when no config file is present
@@ -112,6 +117,7 @@ void WriteAISdata(void);
 bool InitSerialPort(void);
 bool InitWinsock(void);
 void SendNMEAtoIP(char s_nmea[80]);
+void ReceiveUDP(void);
 
 enum Lat_long { LAT = 1, LON = 2};
 
@@ -137,8 +143,9 @@ int main(int argc, char *argv [])
     //else cout << "Not an expected input\n";
 
     if (answer == '1') PgmMode = 1;
-    if (answer == '2') PgmMode = 2;
+    if (answer == '2') { PgmMode = 2; ReceiveSerial = true; }
     if (answer == '3') { PgmMode = 1; ReceiveSerial = true; }
+
     switch (PgmMode) {
       //int Dummy;
     case 1:
@@ -178,7 +185,36 @@ int main(int argc, char *argv [])
     LastWindMes = clock() + 400;
     LastHDTMes = clock() + 500;
 
-    
+	if (PgmMode == 1) {
+		//InitWinsock();
+
+		
+	}
+
+	//test IP adr
+	//if ((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == SOCKET_ERROR) {
+	//	printf("socket() failed with error code : %d", WSAGetLastError());
+	//	exit(EXIT_FAILURE);
+	//}
+
+	////setup address structure
+	//memset((char *)&si_other, 0, sizeof(si_other));
+	//si_other.sin_family = AF_INET;
+	//si_other.sin_port = htons(PORT);
+	//si_other.sin_addr.S_un.S_addr = inet_addr(SERVER);  //INADDR_ANY; //inet_addr(SERVER);
+	//char testmes[] = "$GPTES,\"Test\"";
+	//if (sendto(sock, testmes, strlen(testmes), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR) {
+	//	int err = WSAGetLastError();
+
+	//	printf("sendto() failed with error code : %d", err); // WSAGetLastError());
+	//	exit(EXIT_FAILURE);
+	//}
+	////if (!hideNMEA) printf("To IP port:%d  %s\n", PORT, s_nmea);
+
+	//closesocket(sock);
+
+
+
     while (!esc) { //Quit on Esc or space *************************************THE BIG WHILE :-)***************:)
 
         if (( ( clock() - LastWindMes ) ) > 2000) {// Wait 2 sec before next MWV mes.
@@ -348,6 +384,7 @@ int main(int argc, char *argv [])
         }
 
         if ( ReceiveSerial ) ReadSerial(); //Read serial port for NMEA messages
+        //ReceiveUDP();
 
         if (_kbhit()) { //Check the buffer for a key press to exit the program or enter a new course
             OnKeyPress();
@@ -360,7 +397,7 @@ if (PgmMode == 1) {
   closesocket(sock);
   WSACleanup();
 }
-if (PgmMode == 2) {
+if (PgmMode == 2 || ReceiveSerial) {
   // Close serial port
   fprintf_s(stderr, "Closing serial port...");
   if (CloseHandle(hSerial) == 0) {
@@ -1352,11 +1389,40 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   bool InitWinsock(void) {
   //Initialise winsock
   printf("\nInitialising Winsock IP connection...");
-  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+  if (WSAStartup(MAKEWORD(1, 1), &wsa) != 0) {
     printf("Failed. Error Code : %d", WSAGetLastError());
     exit(EXIT_FAILURE);
   }
   printf("Initialised on port: %d\n", PORT);
+
+  //Test
+
+  char ac[80];
+  if (gethostname(ac, sizeof(ac)) == SOCKET_ERROR) { //gethostname
+	  cerr << "Error " << WSAGetLastError() <<
+		  " when getting local host name." << endl;
+	  return 1;
+  }
+  cout << "\nHost name is " << ac << "." << endl;
+
+  struct hostent *phe = gethostbyname(ac);
+  if (phe == 0) {
+	  cerr << "Yow! Bad host lookup." << endl;
+	  return 1;
+  }
+
+  for (int i = 0; phe->h_addr_list[i] != 0; ++i) {
+	  //struct in_addr addr;
+	  memcpy(&addr, phe->h_addr_list[i], sizeof(struct in_addr));
+	  cout << "Address " << i << ": " << inet_ntoa(addr) << endl;
+	  char c_adr[20];
+	  //c_adr = inet_ntoa(addr);
+	  //getservbyname
+	  string adr;
+	  adr = inet_ntoa(addr);
+	  cout << "\n" << adr;
+  }
+
   }
 
   void SendNMEAtoIP(char s_nmea[80]) {
@@ -1370,14 +1436,61 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
     memset((char *)&si_other, 0, sizeof(si_other));
     si_other.sin_family = AF_INET;
     si_other.sin_port = htons(PORT);
-    si_other.sin_addr.S_un.S_addr = inet_addr(SERVER);  //INADDR_ANY; //inet_addr(SERVER);
+    si_other.sin_addr.S_un.S_addr = inet_addr(inet_ntoa(addr));  //INADDR_ANY; //inet_addr(SERVER); //inet_ntoa(addr)
 
     if (sendto(sock, s_nmea, strlen(s_nmea), 0, (struct sockaddr *) &si_other, slen) == SOCKET_ERROR) {
-      printf("sendto() failed with error code : %d", WSAGetLastError());
+		int err = WSAGetLastError();
+		printf("sendto() failed with error code : %d", err); // WSAGetLastError());
       exit(EXIT_FAILURE);
     }
     //if (!hideNMEA) printf("To IP port:%d  %s\n", PORT, s_nmea);
 
     closesocket(sock);
     
+  }
+
+  void ReceiveUDP(void){
+    cout << "Recieve UDP....\n";
+    //create socket
+    if ( (sock_r = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == SOCKET_ERROR ) { //SOCK_STREAM   SOCK_DGRAM
+      printf("Recv_socket() failed with error code : %d", WSAGetLastError());
+      exit(EXIT_FAILURE);
+    }
+
+  //setup address structure
+  memset((char *)&si_other, 0, sizeof(si_other));
+  si_other.sin_family = AF_INET;
+  si_other.sin_port = htons(PORT);
+  si_other.sin_addr.S_un.S_addr = inet_addr(SERVER); // (SERVER);  //INADDR_ANY; //inet_addr(SERVER);
+
+  //Bind
+  if (bind(sock_r, (struct sockaddr *)&si_other, sizeof(si_other)) == SOCKET_ERROR) {
+    printf("Bind failed with error code : %d", WSAGetLastError());
+    exit(EXIT_FAILURE);
+  }
+  cout << "Bind done";
+  int test;
+  char data[100];
+  memset(recmessage, '\0', BUFLEN);
+  //if (recvfrom(sock_r, (char *)&recmessage, (int)sizeof(recmessage), 0, (struct sockaddr *)&si_other, &slen) < 0) {
+  //if (recvfrom(sock_r, (char *)&recmessage, (int)sizeof(recmessage), 0, (struct sockaddr *)&si_other, &slen) == SOCKET_ERROR) {
+  //  fprintf(stderr, "UDP receive failed with error %d\n", WSAGetLastError());  //"Error receiving data.\n");
+  //  exit(EXIT_FAILURE);
+  //} else cout << recmessage;
+
+  int ret = recvfrom(sock_r, recmessage, (int)sizeof(recmessage), 0, (struct sockaddr *) &si_other, &slen);
+   
+  if (ret == SOCKET_ERROR)
+  {
+	  printf("Error\nCall to recvfrom(s, szMessage, iMessageLen, 0, (struct sockaddr *) &remote_addr, &iRemoteAddrLen); failed with:\n%d\n", WSAGetLastError());
+	  exit(1);
+  }
+
+  printf("Packet received\n");
+  int iMessageLen = ret;        // Length of the data received
+  recmessage[iMessageLen] = '\0';     // Convert to cstring
+  cout << recmessage;
+  
+  closesocket(sock_r);
+  //WSACleanup(); //??
   }
