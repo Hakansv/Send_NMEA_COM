@@ -1,6 +1,5 @@
 // Send_NMEA_COM.cpp : Defines the entry point for the console application.
-// A simple serial port writing example
-// Written by Ted Burke - last updated 13-2-2013
+// The serial port parts was written by Ted Burke - last updated 13-2-2013
 // published http://batchloaf.wordpress.com/2013/02/13/writing-bytes-to-a-serial-port-in-c/
 // Adapted for NMEA simulation by Douwe Fokkema 11-11-2014
 // Adapted with moving position and NMEA chechsum by Håkan Svensson 2014-11-20
@@ -8,6 +7,11 @@
 // Functions for user input of Nav-Data. Håkan 2016-11-08
 // More UI functions. Håkan 2016-11-10
 // Read course from serial input RAHDT or ECAPB 2016-11-28
+// Optional send data to IP-UDP instead of a serial port. 2018-06-10/Håkan
+
+/*
+You can by your own choice use this program or any part of it as you like.
+*/
  
 #include "stdafx.h"
 #include <iostream>
@@ -136,15 +140,19 @@ int main(int argc, char *argv [])
    
     ReadNavData(); //Read Navdata from file
 
-    //char answer;
+    REDO:
     fprintf(stderr, "Do you want to send data based on %s to:\n", s_navdatafile);
-    _cputs("Press \"1\" to use IP-UDP port 10110\nPress \"2\" to use Serial-COM port\nPress \"3\" to also use Serial-COM port for incoming mes\n");
+    _cputs("Press \"1\" to use IP-UDP port 10110\nPress \"2\" to use Serial-COM port\nPress \"3\" Send to IP-UDP but also use Serial-COM port for incoming mes\n");
     char answer = toupper(_getch());
-    //else cout << "Not an expected input\n";
-
     if (answer == '1') PgmMode = 1;
-    if (answer == '2') { PgmMode = 2; ReceiveSerial = true; }
-    if (answer == '3') { PgmMode = 1; ReceiveSerial = true; }
+    else if (answer == '2') { PgmMode = 2; ReceiveSerial = true; }
+    else if (answer == '3') { PgmMode = 1; ReceiveSerial = true; }
+    else {
+        _cputs("\nNot an expected key press\nPress \"y\" to try again\nAny other key will quit program.\n");
+        answer = toupper(_getch());
+        if (answer == 'Y') goto REDO;
+        else return 0;
+    }
 
     switch (PgmMode) {
       //int Dummy;
