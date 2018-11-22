@@ -16,6 +16,7 @@ You can by your own choice use this program or any part of it as you like.
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
+
 //#include <winsock2.h>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
@@ -1141,7 +1142,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       string token [16];
       string sentense, courseunit, XTE_Dir;
       double d_newcourse = NULL, d_XTE = 0.0;
-      char recbuf [50];
+      char recbuf [60];
       int bytestoread = 0, y = 0;
       
 
@@ -1151,7 +1152,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
                 for ( i = 0; i < dwReading; i++ )
                     s += recbuf [i];
                 //--HDT,x.x,T*hh<CR><LF>
-          
+                //cout << s;
               while ( ( pos = s.find( delimiter ) ) != std::string::npos ) {
                   token [y] = s.substr( 0, pos );
                   s.erase( 0, pos + delimiter.length() );
@@ -1196,7 +1197,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
                           if (WP_ID != token[y]) WP_ID = token[y];
                           break;
                       case 11: //Bearing, present position to Destination
-                          d_newcourse = stod(token [y]);
+                          try { d_newcourse = stod(token[y]); } //May be left over UTF8 from token(10)
+                          catch (...) { break; } //Don't care about error handling, just continue.
                           break;
                       case 12:  //M = Magnetic, T = True
                           courseunit = token [y];
