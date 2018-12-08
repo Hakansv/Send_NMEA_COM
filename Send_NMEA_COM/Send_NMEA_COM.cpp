@@ -1425,7 +1425,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
 	  //struct in_addr addr;
 	  memcpy(&addr, phe->h_addr_list[i], sizeof(struct in_addr));
 	  cout << "Address " << i << ": " << inet_ntoa(addr) << endl;
-	  char c_adr[20];
+	  //char c_adr[20];
 	  //c_adr = inet_ntoa(addr);
 	  //getservbyname
 	  string adr;
@@ -1479,8 +1479,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
     exit(EXIT_FAILURE);
   }
   cout << "Bind done";
-  int test;
-  char data[100];
+  //int test;
+  //char data[100];
   memset(recmessage, '\0', BUFLEN);
   //if (recvfrom(sock_r, (char *)&recmessage, (int)sizeof(recmessage), 0, (struct sockaddr *)&si_other, &slen) < 0) {
   //if (recvfrom(sock_r, (char *)&recmessage, (int)sizeof(recmessage), 0, (struct sockaddr *)&si_other, &slen) == SOCKET_ERROR) {
