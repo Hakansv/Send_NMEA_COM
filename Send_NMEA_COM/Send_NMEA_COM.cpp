@@ -2,12 +2,12 @@
 // The serial port parts was written by Ted Burke - last updated 13-2-2013
 // published http://batchloaf.wordpress.com/2013/02/13/writing-bytes-to-a-serial-port-in-c/
 // Adapted for NMEA simulation by Douwe Fokkema 11-11-2014
-// Adapted with moving position and NMEA chechsum by Håkan Svensson 2014-11-20
-// Added routine to find a COM port and more NMEA strings by Håkan 2016-06-09
-// Functions for user input of Nav-Data. Håkan 2016-11-08
-// More UI functions. Håkan 2016-11-10
+// Adapted with moving position and NMEA chechsum by HÃ¥kan Svensson 2014-11-20
+// Added routine to find a COM port and more NMEA strings by HÃ¥kan 2016-06-09
+// Functions for user input of Nav-Data. HÃ¥kan 2016-11-08
+// More UI functions. HÃ¥kan 2016-11-10
 // Read course from serial input RAHDT or ECAPB 2016-11-28
-// Optional send data to IP-UDP instead of a serial port. 2018-06-10/Håkan
+// Optional send data to IP-UDP instead of a serial port. 2018-06-10/HÃ¥kan
 
 /*
 You can by your own choice use this program or any part of it as you like.
@@ -244,7 +244,7 @@ int main(int argc, char *argv [])
               }
             }
            
-            if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
+            if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strÃ¤ngen
         }
         if (((clock() - PosTimer) / CLOCKS_PER_SEC) > SecToNextPos) {
             CalculateNewPos(d_Lat, d_long); // Wait for enough distance to calc a new pos.
@@ -283,8 +283,8 @@ int main(int argc, char *argv [])
               }
             }
 
-            //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strängen NMEA
-            if (!hideNMEA) fprintf_s(stderr, NMEA); //\n finns i strängen NMEA
+            //fprintf(stderr, "%d bytes NMEA: %s", bytes_written, NMEA); //\n finns i strÃ¤ngen NMEA
+            if (!hideNMEA) fprintf_s(stderr, NMEA); //\n finns i strÃ¤ngen NMEA
             PauseTimer1 = clock();
         }
 
@@ -300,7 +300,7 @@ int main(int argc, char *argv [])
               return 1;
             }
           }
-            if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strängen Head
+            if (!hideNMEA) fprintf_s(stderr, HDM_NMEA); //\n finns i strÃ¤ngen Head
             PauseTimer2 = clock();
         }
 
@@ -317,7 +317,7 @@ int main(int argc, char *argv [])
               return 1;
             }
           }
-            if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
+            if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strÃ¤ngen
             PauseTimer3 = clock();
         }
 
@@ -335,7 +335,7 @@ int main(int argc, char *argv [])
                 return 1;
               }
             }
-            if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strängen
+            if (!hideNMEA) fprintf_s(stderr, NMEA_DBT); //\n finns i strÃ¤ngen
             PauseTimer4 = clock();
         }
 
@@ -355,7 +355,7 @@ int main(int argc, char *argv [])
                     return 1;
                   }
                 }
-                if (!hideNMEA) fprintf_s(stderr, NMEA_MDA); //\n finns i strängen
+                if (!hideNMEA) fprintf_s(stderr, NMEA_MDA); //\n finns i strÃ¤ngen
             } else {
                 MakeNMEA_XDR(); //1
                 if (PgmMode == 1) {
@@ -369,7 +369,7 @@ int main(int argc, char *argv [])
                     return 1;
                   }
                 }
-                if (!hideNMEA) fprintf_s(stderr, NMEA_XDR); //\n finns i strängen
+                if (!hideNMEA) fprintf_s(stderr, NMEA_XDR); //\n finns i strÃ¤ngen
             }
             PauseTimer5 = clock();
         }
@@ -388,7 +388,7 @@ int main(int argc, char *argv [])
                 return 1;
               }
             }
-            if (!hideNMEA) fprintf_s(stderr, NMEA_WPL); //\n finns i strängen
+            if (!hideNMEA) fprintf_s(stderr, NMEA_WPL); //\n finns i strÃ¤ngen
             PrintWPLtoFile();
         }
 
@@ -980,7 +980,8 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
           << "     Hit A to record cruising data to AIS_replay txt-file\n"
           << "     Hit ? or _ to instantly change wind direction 10 degr up or down\n"
           << "     Unless course is obtained from serial input you can:\n"
-          << "     Press + or - to instantly change course 10 degr up or down\n"
+          << "     Press j or l to instantly change course 5 degr up or down\n"
+          << "     Press i or k to increase or decrease speed by .5 knt\n"
           << "     Press W to make WPL message and also print to file\n"
           << "     Press any other key to change the initial course to a new value.\n\n";
   }
@@ -989,6 +990,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       char key = _getch();
       //cout << key << "\n";
       bool pIsTouched = false;
+      bool speedChanged = false;
       switch (key) {
       case 27: //Esc
       case 32: //Space
@@ -999,15 +1001,27 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
               WriteNavdata();
           }
           break;
-      case '+':
+      case 'l': //Turn right
           if ( RadarHeading ) break;// No course change while heading from radar
-          d_Course += 10;
+          d_Course += 5;
           if (d_Course > 360) d_Course = d_Course - 360;
           break;
-      case '-':
+      case 'j': //Turn left
           if ( RadarHeading ) break;// No course change while heading from radar
-          d_Course -= 10;
+          d_Course -= 5;
           if (d_Course < 0) d_Course = 360 + d_Course;
+          break;
+      case 'i': //Speed up
+          pIsTouched = true;
+          speedChanged = true;
+          d_SOG += .5;
+          if (d_SOG > 20) d_SOG = 20; 
+          break;
+      case 'k': //Speed down
+          pIsTouched = true;
+          speedChanged = true;
+          d_SOG -= .5;
+          if (d_SOG < 0) d_SOG = 0;
           break;
       case 'a':
       case 'A':
@@ -1072,6 +1086,10 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       if ( !esc && !pIsTouched && !RadarHeading ) {
           FormatCourseData();
           cout << "New course: " << d_Course << " degrees\n";
+          NMEA_HDM(); //Update NMEA message after course change
+      }
+      if (!esc && !RadarHeading && speedChanged) {
+          cout << "Speed changed: " << d_SOG << " knots\n";
           NMEA_HDM(); //Update NMEA message after course change
       }
   }
