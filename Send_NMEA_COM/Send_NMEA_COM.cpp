@@ -16,6 +16,7 @@ You can by your own choice use this program or any part of it as you like.
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
+#include <ctime>
 
 //#include <winsock2.h>
 
@@ -44,7 +45,7 @@ double d_Course = 282.1;  //Course to steer
 double d_SOG = 6.5;    //Speed to run
 double Def_Lat = 5803.200, Def_Long = 01122.100; //NMEA-Format!! Initial position for the cruise, N/E :)
 string s_NS = "N", s_EW = "E";
-double wmm = 3.0; //Variation to calc HDM from Course
+double wmm = 7.0; //Variation to calc HDM from Course
 
 //Others
 double SecToNextPos = 2.5; //Time, e.g. distance to wait before next posistion change.
@@ -63,7 +64,7 @@ int InfoCount = 0;
 int testsum(string);
 int WPL_count = 0;
 char NMEA [80], HDM_NMEA [50], MWV_NMEA [50], NMEA_DBT [50], NMEA_MDA [70], NMEA_XDR[80];
-char NMEA_WPL[50];
+char NMEA_WPL[50], NMEA_GGA[80];
 double d_long = Def_Long, d_Lat = Def_Lat;
 bool esc = false;
 double STW = 6.20;      //STW for VHW
@@ -101,6 +102,7 @@ double rad2deg( const double &Rad_in, const int &LL );
 double NMEA_degToDecDegr( const double &NMEA_deg, const int &LL );
 double DegrPosToNMEAPos(double, int);
 void MakeNMEA(void);
+void MakeNMEA_GGA();
 void MakeNMEA_VHW();
 void NMEA_HDM(void);
 void MakeNMEA_MWV(bool);
@@ -320,8 +322,8 @@ int main(int argc, char *argv [])
             if (!hideNMEA) fprintf_s(stderr, NMEA_MTW); //\n finns i strängen
             PauseTimer3 = clock();
         }
-
-        if (( ( clock() - PauseTimer4 ) ) > 1500) {
+                
+        if (( ( clock() - PauseTimer4 ) ) > 5000) {
             //Send NMEA_DBT > Depth
             MakeNMEA_DBT();
             if (PgmMode == 1) {
@@ -339,7 +341,22 @@ int main(int argc, char *argv [])
             PauseTimer4 = clock();
         }
 
-        if (( ( clock() - PauseTimer5 ) ) > 5000) {
+        if (( ( clock() - PauseTimer5 ) ) > 3200) {
+            //Send NMEA_GGA
+            MakeNMEA_GGA();
+            if (PgmMode == 1) {
+              SendNMEAtoIP(NMEA_GGA);
+            }
+            if (PgmMode == 2) {
+              if (!WriteFile(hSerial, NMEA_GGA, strlen(NMEA_GGA), &bytes_written, NULL)) {
+                fprintf_s(stderr, "Error. Press a key to exit\n");
+                CloseHandle(hSerial);
+                int Dummy = toupper(_getch());
+                return 1;
+              }
+            }
+            if (!hideNMEA) fprintf_s(stderr, NMEA_GGA); //\n finns i strängen
+
             //Send NMEA_MDA / XDR > Baro-press
             bool MDA = false;
             if (MDA) {
@@ -452,6 +469,58 @@ void MakeNMEA() {
   for (int a = 0; a < Lens; a++) {
       NMEA[a] = nmea[a];
     }
+}
+
+void MakeNMEA_GGA() {
+
+  string s_Lat = static_cast<ostringstream*>( &( ostringstream() << setprecision(4) << fixed << d_Lat ) )->str();
+  string s_Long = static_cast<ostringstream*>( &( ostringstream() << setprecision(4) << fixed << d_long ) )->str();
+  // Get current UTC time
+  time_t current_time = time(NULL);
+  tm* d_times = gmtime(&current_time);
+  char time[10];
+  sprintf(time, "%02d%02d%02d.00", d_times->tm_hour, d_times->tm_min, d_times->tm_sec);
+    
+  // $--GGA, hhmmss.ss, ddmm.mm, a, ddmm.mm, a, x, xx, x.x, x.x, M, x.x, M, x.x, xxxx*hh<CR><LF>
+  //                      lat    N/S   lon  E/W Q1  Sats 
+  string nmea = "$GPGGA,";
+  nmea += time;   //1. UTC time
+  nmea += ",";
+  nmea += s_Lat;  //2. Lat
+  nmea += ",";
+  nmea += s_NS;   //3. N/S
+  nmea += ",";
+  nmea += s_Long; //4.Long
+  nmea += ",";
+  nmea += s_EW;   //5.E/W
+  nmea += ",";
+  nmea += "1";   //6.Quality (1)
+  nmea += ",";
+  nmea += "07";   //7.Sats 
+  nmea += ",";
+  nmea += "1.9"; //8.Horizontal Dilution m
+  nmea += ",";
+  nmea += "3.1"; //9.Antenna Altitude
+  nmea += ",";
+  nmea += "M";   //10.Meter
+  nmea += ",";
+  nmea += "40";  //11.Geoidal separation
+  nmea += ",";
+  nmea += "M";   //12.Meter
+  nmea += ",";
+                 //13
+  nmea += ",";
+                 //14
+  nmea += '*';
+  nmea += static_cast<ostringstream*>( &( ostringstream() << hex << testsum(nmea) ) )->str();
+  nmea += "\r";
+  nmea += "\n";
+
+  int Lens = nmea.size();
+  memset(NMEA_GGA, NULL, sizeof(NMEA)); //Clear the array
+  for (int a = 0; a < Lens; a++) {
+    NMEA_GGA[a] = nmea[a];
+  }
 }
 
 //Create NMEA string: $HCHDM,238.5,M*hh/CR/LF
@@ -1155,7 +1224,7 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
   void ReadSerial( void ) {
       DWORD dwReading = 0;
       size_t pos = 0;
-      string s;
+      string s = "";
       string delimiter = ",";
       string token [16];
       string sentense, courseunit, XTE_Dir;
@@ -1206,7 +1275,10 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
                           XTE_Dir = token [y];
                           break;
                       case 6: //Status A = Arrival Circle Entered
-                          if ("A" == token[y]) cout << "Waypoint " << WP_ID << " arrived\n";
+                          if ("A" == token[y]) {
+                              cout << "Waypoint " << WP_ID << " arrived\n";
+                              if (WP_ID == "EndOfR") esc = true; //Exit program
+                          }
                           break;
                       //case 7:  // Status: A = Perpendicular passed at waypoint. Not used by OCPN
                       //    if ("A" == token[y]) cout << " Waypoint passed\n";
@@ -1240,12 +1312,13 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
 
               if (d_newcourse && "T" == (courseunit)) { //True heading
                   // Increased XTE action for the simulation, XTE is normally like 0.015
-                  double dXTE_factor = d_XTE > 0.1 ? ( d_XTE > 0.5 ? 10 : 50 ) : 100; // Like Excel hmmmm!?
-                  d_newcourse = ("L" == XTE_Dir ? d_newcourse + dXTE_factor * d_XTE : d_newcourse - dXTE_factor * d_XTE);
+                  double dXTE_factor = d_XTE > 0.5 ? 60 : 100; // Like Excel hmmmm!?  ( d_XTE > 0.5 ? 10 : 50 ) d_XTE > 0.1 ? 50 : 90
+                  d_newcourse = ("L" == XTE_Dir ? d_newcourse - (dXTE_factor * d_XTE) : d_newcourse + (dXTE_factor * d_XTE));
                       if (d_newcourse < 0.) d_newcourse += 360.;
                       else if (d_newcourse > 360.) d_newcourse -= 360.;
                 RAHeadIsValid = true;
                 d_Course = d_newcourse; // stod( token [1] );
+                //cout << "New course change: " << ( d_Course ) << "  dXTE: " << d_XTE << "\n";
                 FormatCourseData();
                 NMEA_HDM(); //Update NMEA message after course change
                 LastHDTMes = clock(); //Serial watchdog
@@ -1284,15 +1357,15 @@ double NMEA_degToDecDegr(const double &NMEA_deg, const int &LL) {
       return( n );
   }
   void WriteAISdata(void) {
-      string MMSI = "266123456",
+      string MMSI = "265599691", // 265599690 momo, 265509140 FREYA, 265724260 OLJAREN
           STATUS = "5",
           SPEED = static_cast<ostringstream*>(&(ostringstream() << setprecision(0) << fixed << d_SOG * 10))->str(),
           a_LON = static_cast<ostringstream*>(&(ostringstream() << setprecision(7) << fixed << NMEA_degToDecDegr(d_long, LON)))->str(),
           a_LAT = static_cast<ostringstream*>(&(ostringstream() << setprecision(7) << fixed << NMEA_degToDecDegr(d_Lat, LAT)))->str(),
           COURSE = static_cast<ostringstream*>(&(ostringstream() << setprecision(0) << fixed << d_Course))->str(),
           HEADING = COURSE, //s_Mag,
-          TIMESTAMP = "2016-12-28T20:19:47",
-          SHIP_ID = "225704";
+          TIMESTAMP = "2021-01-13T20:19:47",
+          SHIP_ID = "225706";
       string filePath = userdata;
       filePath += "\\SendNMEACOM";
       if (CreateDirectoryA(filePath.c_str(), NULL) ||
