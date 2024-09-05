@@ -18,10 +18,10 @@ You can by your own choice use this program or any part of it as you like.
 #include <fstream>
 #include <ctime>
 
-//#include <winsock2.h>
+#include <winsock2.h>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
-#define SERVER "127.0.0.255" //"127.0.0.1"  //ip address of udp server192.168.10.255
+#define SERVER "192.168.254.255" //"127.0.0.1"  //ip address of udp server192.168.10.255
 #define BUFLEN 512  //Max length of buffer
 #define PORT 10110   //The port on which to send data
 
