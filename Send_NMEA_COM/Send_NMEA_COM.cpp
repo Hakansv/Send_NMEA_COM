@@ -18,7 +18,7 @@ You can by your own choice use this program or any part of it as you like.
 #include <fstream>
 #include <ctime>
 
-#include <winsock2.h>
+#include <winsock.h>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
 #define SERVER "192.168.254.255" //"127.0.0.1"  //ip address of udp server192.168.10.255
@@ -48,7 +48,7 @@ string s_NS = "N", s_EW = "E";
 double wmm = 7.0; //Variation to calc HDM from Course
 
 //Others
-double SecToNextPos = 2.5; //Time, e.g. distance to wait before next posistion change.
+double SecToNextPos = 0.9; // change to 1.0 for smoth test 2.5; //Time, e.g. distance to wait before next posistion change.
 double d_AWS_kn = 5; //App wind speed
 double d_AWA = 270; // App wind angle
 double d_TWS_kn = 8.5; //True Wind speed
@@ -91,7 +91,7 @@ HANDLE hSerial; //COM port handler
 DWORD bytes_written, total_bytes_written = 0;
 unsigned int PgmMode = 1; // User selected program mode. 1:Serial, 2:UDP-IP, 3:Both
 bool ReceiveSerial(false);
-bool Last = false;
+bool Last = true;
 
 //Functions
 void CalculateNewPos( const double &Lat_in, const double &Long_in );
@@ -248,12 +248,12 @@ int main(int argc, char *argv [])
            
             if (!hideNMEA) fprintf_s(stderr, MWV_NMEA); //\n finns i strängen
         }
-        if (((clock() - PosTimer) / CLOCKS_PER_SEC) > SecToNextPos) {
+        if (((clock() - PosTimer) / CLOCKS_PER_SEC) > SecToNextPos) { 
             CalculateNewPos(d_Lat, d_long); // Wait for enough distance to calc a new pos.
             if (RecordAISdata ) WriteAISdata();
         }
 
-        if (( ( clock() - PauseTimer1 ) ) > 700) {
+        if (( ( clock() - PauseTimer1 ) ) > 900) { //700
             if (InfoCount > 20) {
                 PrintUserInfo();
                 InfoCount = 0;
@@ -271,7 +271,7 @@ int main(int argc, char *argv [])
                 MakeNMEA(); //Make the RMC sentance.
             } else MakeNMEA_VHW();  // Make the VHW sentance. Update each turn
 
-            Last = !Last; //Alter between the two every turn
+            // Last = !Last; //Alter between the two every turn. Omitted to favor RMC 25-01
             if (PgmMode == 1) {
               SendNMEAtoIP(NMEA);
             }
